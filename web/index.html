@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Binder Tutor</title>
+<style>
+:root { --bg:#14161f; --card:#1e2130; --text:#e8e9ee; --muted:#8b8fa3; --accent:#c9a84c; --want:#4ccc6f; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; }
+header { position:sticky; top:0; z-index:10; background:rgba(20,22,31,.97); border-bottom:1px solid #2a2e42; padding:14px 20px; }
+h1 { font-size:1.25rem; margin-bottom:10px; }
+.controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+input,select,button.tab { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:8px 12px; font-size:.9rem; }
+input { flex:1; min-width:160px; }
+button.tab { cursor:pointer; } button.tab.on { border-color:var(--accent); color:var(--accent); }
+#status { color:var(--muted); font-size:.85rem; padding:8px 20px; }
+.matchbox { margin:16px 20px; background:var(--card); border:1px solid #2a2e42; border-radius:12px; padding:16px; }
+.matchbox h2 { font-size:1rem; margin-bottom:8px; color:var(--want); }
+.matchbox .pair { margin:6px 0; font-size:.9rem; cursor:pointer; }
+.matchbox .pair:hover { color:var(--accent); }
+#grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; padding:20px; }
+.card { background:var(--card); border-radius:12px; overflow:hidden; border:1px solid #2a2e42; position:relative; }
+.card.want { border-color:var(--want); }
+.card img { width:100%; aspect-ratio:488/680; display:block; background:#0d0e14; }
+.info { padding:9px 11px; }
+.name { font-size:.86rem; font-weight:600; }
+.meta { font-size:.73rem; color:var(--muted); margin-top:3px; }
+.badges { position:absolute; top:8px; left:8px; display:flex; gap:5px; }
+.badge { font-size:.67rem; font-weight:700; padding:3px 7px; border-radius:20px; }
+.qty { background:rgba(0,0,0,.75); color:#fff; }
+.foil { background:linear-gradient(90deg,#c9a84c,#e8d48b); color:#1a1a1a; }
+.wantb { background:var(--want); color:#0c2214; }
+#more { display:block; margin:10px auto 30px; padding:10px 28px; background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+<h1>🃏 Binder Tutor</h1>
+<div class="controls">
+<select id="who"></select>
+<button class="tab on" id="tabColl">Samling</button>
+<button class="tab" id="tabMatch">Hvem har mine wants?</button>
+<input id="q" type="search" placeholder="Søg kortnavn...">
+</div>
+</header>
+<div id="status">Forbinder...</div>
+<div id="matches" style="display:none"></div>
+<div id="grid"></div>
+<button id="more" style="display:none">Vis flere</button>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, doc, getDoc, getDocs }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ===== INDSÆT DIN FIREBASE-CONFIG HER (Project settings -> Web app) =====
+const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "DIT-PROJEKT.firebaseapp.com",
+  projectId: "DIT-PROJEKT",
+};
+// ========================================================================
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const PAGE = 100;
+
+let friends = [], cards = [], filtered = [], shown = 0, mode = "coll", myWants = new Set();
+
+const img = c => c.scryfallId
+  ? `https://cards.scryfall.io/normal/front/${c.scryfallId[0]}/${c.scryfallId[1]}/${c.scryfallId}.jpg` : "";
+
+async function loadFriends() {
+  const snap = await getDocs(collection(db, "friends"));
+  friends = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  $("who").innerHTML = friends.map(f =>
+    `<option value="${f.id}">${f.name} (${f.uniqueCount ?? "?"} kort)</option>`).join("");
+  if (friends.length) selectFriend(friends[0].id);
+}
+
+async function selectFriend(fid) {
+  $("status").textContent = "Henter samling...";
+  const meta = friends.find(f => f.id === fid);
+  const chunkSnaps = await Promise.all(
+    Array.from({ length: meta.chunks ?? 0 }, (_, i) =>
+      getDoc(doc(db, "friends", fid, "chunks", String(i)))));
+  cards = chunkSnaps.flatMap(s => s.exists() ? s.data().cards : []);
+  const w = await getDoc(doc(db, "wants", fid));
+  myWants = new Set((w.exists() ? w.data().cards : []).map(x => x.toLowerCase()));
+  $("status").textContent =
+    `${meta.name}: ${cards.length} unikke kort · opdateret ${new Date(meta.updated).toLocaleString("da")}`;
+  render();
+}
+
+async function showMatches() {
+  const fid = $("who").value;
+  const m = await getDoc(doc(db, "matches", fid));
+  const data = m.exists() ? m.data() : {};
+  const box = $("matches");
+  box.style.display = "block";
+  const entries = Object.entries(data);
+  box.innerHTML = entries.length === 0
+    ? `<div class="matchbox"><h2>Ingen matches endnu</h2></div>`
+    : entries.sort((a, b) => (b[1].totalEur || 0) - (a[1].totalEur || 0)).map(([oid, m]) => {
+        const owner = friends.find(f => f.id === oid);
+        const total = (m.totalEur || 0).toFixed(2);
+        return `<div class="matchbox"><h2>💰 ${owner?.name ?? oid} har ${m.cards.length} af dine wants — værdi ~${total} €</h2>
+          ${m.cards.map(h => `<div class="pair">• ${h.name} — ${h.set} #${h.cn}${h.foil ? " ✦foil" : ""} x${h.qty}${h.eur ? ` · <b style="color:var(--accent)">${h.eur.toFixed(2)} €</b>` : ""} <span style="color:var(--muted)">(${h.binder})</span></div>`).join("")}
+        </div>`;
+      }).join("");
+  cards = Object.values(data).flatMap(m => m.cards);
+  render();
+}
+
+function render() {
+  const q = $("q").value.toLowerCase();
+  filtered = cards.filter(c => !q || c.name.toLowerCase().includes(q));
+  $("grid").innerHTML = ""; shown = 0;
+  more();
+}
+function more() {
+  const slice = filtered.slice(shown, shown + PAGE);
+  $("grid").insertAdjacentHTML("beforeend", slice.map(c => {
+    const isWant = myWants.has(c.name.toLowerCase());
+    return `<div class="card${isWant ? " want" : ""}">
+      <div class="badges">
+        ${c.qty > 1 ? `<span class="badge qty">x${c.qty}</span>` : ""}
+        ${c.foil ? `<span class="badge foil">FOIL</span>` : ""}
+        ${isWant ? `<span class="badge wantb">WANT</span>` : ""}
+      </div>
+      <img loading="lazy" src="${img(c)}" onerror="this.style.opacity=.15">
+      <div class="info"><div class="name">${c.name}</div>
+      <div class="meta">${c.set} #${c.cn} · ${c.condition}</div></div>
+    </div>`;
+  }).join(""));
+  shown += slice.length;
+  $("more").style.display = shown < filtered.length ? "block" : "none";
+}
+
+$("who").onchange = e => mode === "coll" ? selectFriend(e.target.value) : showMatches();
+$("q").oninput = render;
+$("more").onclick = more;
+$("tabColl").onclick = () => { mode = "coll"; $("tabColl").classList.add("on");
+  $("tabMatch").classList.remove("on"); $("matches").style.display = "none"; selectFriend($("who").value); };
+$("tabMatch").onclick = () => { mode = "match"; $("tabMatch").classList.add("on");
+  $("tabColl").classList.remove("on"); showMatches(); };
+
+loadFriends().catch(e => $("status").textContent = "Fejl: " + e.message);
+</script>
+</body>
+</html>

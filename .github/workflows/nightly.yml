@@ -1,0 +1,25 @@
+name: Nightly sync
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC = 04:00 dansk sommertid
+  workflow_dispatch: {}    # manuel kørsel fra Actions-fanen
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r ingest/requirements.txt
+
+      - name: Run ingest
+        working-directory: ${{ github.workspace }}
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: python ingest/main.py

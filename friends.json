@@ -1,0 +1,16 @@
+{
+  "friends": [
+    {
+      "id": "nicholas",
+      "name": "Nicholas",
+      "driveFolderId": "INDSAET_DRIVE_FOLDER_ID",
+      "wantsFile": "wants/nicholas.txt"
+    },
+    {
+      "id": "patrick",
+      "name": "Patrick",
+      "driveFolderId": "INDSAET_DRIVE_FOLDER_ID",
+      "wantsFile": "wants/patrick.txt"
+    }
+  ]
+}
