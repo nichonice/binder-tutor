@@ -5,53 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Binder Tutor</title>
 <style>
-:root { --bg:#14161f; --card:#1e2130; --text:#e8e9ee; --muted:#8b8fa3; --accent:#c9a84c; --want:#4ccc6f; }
+:root { --bg:#14161f; --card:#1e2130; --card2:#252a3d; --text:#e8e9ee; --muted:#8b8fa3; --accent:#c9a84c; --want:#4ccc6f; --line:#2a2e42; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; }
-header { position:sticky; top:0; z-index:10; background:rgba(20,22,31,.97); border-bottom:1px solid #2a2e42; padding:14px 20px; }
-h1 { font-size:1.25rem; margin-bottom:10px; }
-.controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-input,select,button.tab { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:8px 12px; font-size:.9rem; }
-input { flex:1; min-width:160px; }
-button.tab { cursor:pointer; } button.tab.on { border-color:var(--accent); color:var(--accent); }
-#status { color:var(--muted); font-size:.85rem; padding:8px 20px; }
-.matchbox { margin:16px 20px; background:var(--card); border:1px solid #2a2e42; border-radius:12px; padding:16px; }
-.matchbox h2 { font-size:1rem; margin-bottom:8px; color:var(--want); }
-.matchbox .pair { margin:6px 0; font-size:.9rem; cursor:pointer; }
-.matchbox .pair:hover { color:var(--accent); }
-#grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; padding:20px; }
-.card { background:var(--card); border-radius:12px; overflow:hidden; border:1px solid #2a2e42; position:relative; }
-.card.want { border-color:var(--want); }
+header { position:sticky; top:0; z-index:20; background:rgba(20,22,31,.97); border-bottom:1px solid var(--line); padding:12px 20px; }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.brand { font-size:1.2rem; font-weight:600; }
+nav { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+nav button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:.88rem; cursor:pointer; }
+nav button.on { border-color:var(--accent); color:var(--accent); }
+input,select { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:9px 12px; font-size:.9rem; }
+button.act { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:9px 14px; cursor:pointer; font-size:.9rem; }
+button.act:hover { border-color:var(--accent); }
+button.primary { background:var(--accent); color:#1a1a1a; border:none; font-weight:600; }
+.me { margin-left:auto; display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--muted); }
+.me img { width:28px; height:28px; border-radius:50%; }
+#view { padding:20px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; }
+.card { background:var(--card); border-radius:12px; overflow:hidden; border:1px solid var(--line); position:relative; }
 .card img { width:100%; aspect-ratio:488/680; display:block; background:#0d0e14; }
-.info { padding:9px 11px; }
-.name { font-size:.86rem; font-weight:600; }
-.meta { font-size:.73rem; color:var(--muted); margin-top:3px; }
+.card.want { border-color:var(--want); }
+.info { padding:8px 10px; } .name { font-size:.85rem; font-weight:600; line-height:1.2; }
+.meta { font-size:.72rem; color:var(--muted); margin-top:3px; }
 .badges { position:absolute; top:8px; left:8px; display:flex; gap:5px; }
 .badge { font-size:.67rem; font-weight:700; padding:3px 7px; border-radius:20px; }
-.qty { background:rgba(0,0,0,.75); color:#fff; }
-.foil { background:linear-gradient(90deg,#c9a84c,#e8d48b); color:#1a1a1a; }
+.qty { background:rgba(0,0,0,.75); color:#fff; } .foil { background:linear-gradient(90deg,#c9a84c,#e8d48b); color:#1a1a1a; }
 .wantb { background:var(--want); color:#0c2214; }
-#more { display:block; margin:10px auto 30px; padding:10px 28px; background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; cursor:pointer; }
+.heart { position:absolute; top:6px; right:6px; width:34px; height:34px; border-radius:50%; border:none; cursor:pointer;
+  background:rgba(0,0,0,.6); color:#fff; font-size:1.05rem; display:flex; align-items:center; justify-content:center; }
+.heart.on { background:var(--want); color:#0c2214; }
+.matchbox { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+.matchbox h2 { font-size:1rem; color:var(--want); margin-bottom:8px; }
+.pair { font-size:.9rem; margin:5px 0; }
+.center { max-width:440px; margin:60px auto; text-align:center; }
+.center p { color:var(--muted); margin:12px 0 20px; line-height:1.6; }
+label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
+.field { max-width:520px; }
+.hint { font-size:.8rem; color:var(--muted); margin-top:6px; line-height:1.5; }
+#toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--card2); border:1px solid var(--accent);
+  padding:10px 18px; border-radius:10px; font-size:.9rem; opacity:0; transition:opacity .2s; z-index:50; }
+#toast.show { opacity:1; }
 </style>
 </head>
 <body>
 <header>
-<h1>🃏 Binder Tutor</h1>
-<div class="controls">
-<select id="who"></select>
-<button class="tab on" id="tabColl">Samling</button>
-<button class="tab" id="tabMatch">Hvem har mine wants?</button>
-<input id="q" type="search" placeholder="Søg kortnavn...">
-</div>
+  <div class="row">
+    <span class="brand">🃏 Binder Tutor</span>
+    <div class="me" id="me"></div>
+  </div>
+  <nav id="nav" style="display:none">
+    <button data-v="friends" class="on">Venner</button>
+    <button data-v="wants">Mine Wants</button>
+    <button data-v="matches">Hvem har mine wants?</button>
+    <button data-v="profile">Min profil</button>
+  </nav>
 </header>
-<div id="status">Forbinder...</div>
-<div id="matches" style="display:none"></div>
-<div id="grid"></div>
-<button id="more" style="display:none">Vis flere</button>
+<div id="view"></div>
+<div id="toast"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, doc, getDoc, getDocs }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== INDSÆT DIN FIREBASE-CONFIG HER (Project settings -> Web app) =====
@@ -63,91 +79,209 @@ const firebaseConfig = {
 // ========================================================================
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = id => document.getElementById(id);
-const PAGE = 100;
+const view = $("view");
+let user = null, myWants = [];   // myWants: [{name, scryfallId, set, cn}]
 
-let friends = [], cards = [], filtered = [], shown = 0, mode = "coll", myWants = new Set();
+const scryImg = c => c ? `https://cards.scryfall.io/normal/front/${c[0]}/${c[1]}/${c}.jpg` : "";
+const toast = m => { const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); };
 
-const img = c => c.scryfallId
-  ? `https://cards.scryfall.io/normal/front/${c.scryfallId[0]}/${c.scryfallId[1]}/${c.scryfallId}.jpg` : "";
+// ---------- Auth ----------
+onAuthStateChanged(auth, async u => {
+  user = u;
+  if (!u) return renderLogin();
+  $("me").innerHTML = `<img src="${u.photoURL}"><span>${u.displayName}</span>
+    <button class="act" id="out" style="padding:5px 10px">Log ud</button>`;
+  $("out").onclick = () => signOut(auth);
+  $("nav").style.display = "flex";
+  // selv-registrering: opret/opdatér users/{uid}
+  const uref = doc(db, "users", u.uid);
+  const snap = await getDoc(uref);
+  if (!snap.exists()) {
+    await setDoc(uref, { name: u.displayName, email: u.email, photoURL: u.photoURL, driveFolderId: "" });
+  }
+  const w = await getDoc(doc(db, "wants", u.uid));
+  myWants = w.exists() ? (w.data().cards || []) : [];
+  show("friends");
+});
 
-async function loadFriends() {
-  const snap = await getDocs(collection(db, "friends"));
-  friends = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  $("who").innerHTML = friends.map(f =>
-    `<option value="${f.id}">${f.name} (${f.uniqueCount ?? "?"} kort)</option>`).join("");
-  if (friends.length) selectFriend(friends[0].id);
+function renderLogin() {
+  $("nav").style.display = "none"; $("me").innerHTML = "";
+  view.innerHTML = `<div class="center">
+    <h1 style="font-size:1.6rem">🃏 Binder Tutor</h1>
+    <p>Se vennegruppens Magic-samlinger, sæt hjerte på de kort du mangler, og find ud af
+    hvem der har dem.</p>
+    <button class="act primary" id="login" style="padding:12px 24px">Log ind med Google</button>
+  </div>`;
+  $("login").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => toast(e.message));
 }
 
-async function selectFriend(fid) {
-  $("status").textContent = "Henter samling...";
-  const meta = friends.find(f => f.id === fid);
-  const chunkSnaps = await Promise.all(
-    Array.from({ length: meta.chunks ?? 0 }, (_, i) =>
-      getDoc(doc(db, "friends", fid, "chunks", String(i)))));
-  cards = chunkSnaps.flatMap(s => s.exists() ? s.data().cards : []);
-  const w = await getDoc(doc(db, "wants", fid));
-  myWants = new Set((w.exists() ? w.data().cards : []).map(x => x.toLowerCase()));
-  $("status").textContent =
-    `${meta.name}: ${cards.length} unikke kort · opdateret ${new Date(meta.updated).toLocaleString("da")}`;
-  render();
+// ---------- Nav ----------
+$("nav").querySelectorAll("button").forEach(b =>
+  b.onclick = () => { $("nav").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); show(b.dataset.v); });
+
+function show(v) {
+  if (v==="friends") return renderFriends();
+  if (v==="wants") return renderWants();
+  if (v==="matches") return renderMatches();
+  if (v==="profile") return renderProfile();
 }
 
-async function showMatches() {
-  const fid = $("who").value;
-  const m = await getDoc(doc(db, "matches", fid));
-  const data = m.exists() ? m.data() : {};
-  const box = $("matches");
-  box.style.display = "block";
-  const entries = Object.entries(data);
-  box.innerHTML = entries.length === 0
-    ? `<div class="matchbox"><h2>Ingen matches endnu</h2></div>`
-    : entries.sort((a, b) => (b[1].totalEur || 0) - (a[1].totalEur || 0)).map(([oid, m]) => {
-        const owner = friends.find(f => f.id === oid);
-        const total = (m.totalEur || 0).toFixed(2);
-        return `<div class="matchbox"><h2>💰 ${owner?.name ?? oid} har ${m.cards.length} af dine wants — værdi ~${total} €</h2>
-          ${m.cards.map(h => `<div class="pair">• ${h.name} — ${h.set} #${h.cn}${h.foil ? " ✦foil" : ""} x${h.qty}${h.eur ? ` · <b style="color:var(--accent)">${h.eur.toFixed(2)} €</b>` : ""} <span style="color:var(--muted)">(${h.binder})</span></div>`).join("")}
-        </div>`;
-      }).join("");
-  cards = Object.values(data).flatMap(m => m.cards);
-  render();
+const wantNames = () => new Set(myWants.map(w => w.name.toLowerCase()));
+
+async function saveWants() {
+  await setDoc(doc(db,"wants",user.uid), { cards: myWants, updated: new Date().toISOString() });
 }
 
-function render() {
-  const q = $("q").value.toLowerCase();
-  filtered = cards.filter(c => !q || c.name.toLowerCase().includes(q));
-  $("grid").innerHTML = ""; shown = 0;
-  more();
-}
-function more() {
-  const slice = filtered.slice(shown, shown + PAGE);
-  $("grid").insertAdjacentHTML("beforeend", slice.map(c => {
-    const isWant = myWants.has(c.name.toLowerCase());
-    return `<div class="card${isWant ? " want" : ""}">
-      <div class="badges">
-        ${c.qty > 1 ? `<span class="badge qty">x${c.qty}</span>` : ""}
-        ${c.foil ? `<span class="badge foil">FOIL</span>` : ""}
-        ${isWant ? `<span class="badge wantb">WANT</span>` : ""}
-      </div>
-      <img loading="lazy" src="${img(c)}" onerror="this.style.opacity=.15">
-      <div class="info"><div class="name">${c.name}</div>
-      <div class="meta">${c.set} #${c.cn} · ${c.condition}</div></div>
-    </div>`;
-  }).join(""));
-  shown += slice.length;
-  $("more").style.display = shown < filtered.length ? "block" : "none";
+// ---------- Venner (samlinger) ----------
+async function renderFriends() {
+  view.innerHTML = `<div class="row" style="margin-bottom:14px">
+    <select id="who"></select><input id="q" placeholder="Søg kort..." style="flex:1;min-width:160px">
+    </div><div id="status" style="color:var(--muted);font-size:.85rem;margin-bottom:12px"></div>
+    <div class="grid" id="grid"></div>
+    <button class="act" id="more" style="display:none;margin:16px auto">Vis flere</button>`;
+  const users = (await getDocs(collection(db,"users"))).docs.map(d=>({id:d.id,...d.data()}));
+  const cols = {};
+  for (const u of users) {
+    const c = await getDoc(doc(db,"collections",u.id));
+    if (c.exists()) cols[u.id] = { ...u, ...c.data() };
+  }
+  const ids = Object.keys(cols);
+  $("who").innerHTML = ids.map(id=>`<option value="${id}">${cols[id].name} (${cols[id].uniqueCount||0} kort)</option>`).join("")
+    || `<option>Ingen samlinger endnu</option>`;
+  let cards=[], filtered=[], shown=0;
+  async function load(id){
+    if(!cols[id]) return;
+    $("status").textContent="Henter...";
+    const cs = await Promise.all(Array.from({length:cols[id].chunks||0},(_,i)=>getDoc(doc(db,"collections",id,"chunks",String(i)))));
+    cards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
+    $("status").textContent = `${cols[id].name}: ${cards.length} unikke · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`;
+    draw();
+  }
+  function draw(){ const q=$("q").value.toLowerCase();
+    filtered=cards.filter(c=>!q||c.name.toLowerCase().includes(q)); $("grid").innerHTML=""; shown=0; more(); }
+  function more(){ const wn=wantNames();
+    $("grid").insertAdjacentHTML("beforeend", filtered.slice(shown,shown+100).map(c=>cardHtml(c,wn.has(c.name.toLowerCase()))).join(""));
+    shown+=Math.min(100,filtered.length-shown); $("more").style.display=shown<filtered.length?"block":"none"; }
+  $("who").onchange=e=>load(e.target.value); $("q").oninput=draw; $("more").onclick=more;
+  if(ids.length) load(ids[0]); else $("status").textContent="Ingen samlinger synket endnu.";
 }
 
-$("who").onchange = e => mode === "coll" ? selectFriend(e.target.value) : showMatches();
-$("q").oninput = render;
-$("more").onclick = more;
-$("tabColl").onclick = () => { mode = "coll"; $("tabColl").classList.add("on");
-  $("tabMatch").classList.remove("on"); $("matches").style.display = "none"; selectFriend($("who").value); };
-$("tabMatch").onclick = () => { mode = "match"; $("tabMatch").classList.add("on");
-  $("tabColl").classList.remove("on"); showMatches(); };
+function cardHtml(c, isWant){
+  return `<div class="card${isWant?' want':''}">
+    <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}</div>
+    <img loading="lazy" src="${scryImg(c.scryfallId)}" onerror="this.style.opacity=.15">
+    <div class="info"><div class="name">${c.name}</div><div class="meta">${c.set||""} ${c.cn?"#"+c.cn:""} · ${c.condition||""}</div></div></div>`;
+}
 
-loadFriends().catch(e => $("status").textContent = "Fejl: " + e.message);
+// ---------- Mine Wants ----------
+function renderWants(){
+  view.innerHTML = `<div class="field">
+    <div class="row"><input id="search" placeholder="Søg kort på Scryfall..." style="flex:1;min-width:200px" autocomplete="off">
+    <button class="act" id="imp">Importér fra Archidekt/Moxfield</button></div>
+    <div id="results" class="grid" style="margin-top:14px"></div>
+  </div>
+  <h2 style="margin:24px 0 12px;font-size:1.1rem">❤️ Mine wants (<span id="wc">${myWants.length}</span>)</h2>
+  <div id="mine" class="grid"></div>`;
+  const sb=$("search"); let t;
+  sb.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>doSearch(sb.value),300); };
+  $("imp").onclick=importDeck;
+  drawMine();
+}
+
+async function doSearch(q){
+  const r=$("results"); if(q.trim().length<2){r.innerHTML="";return;}
+  try{
+    const ac=await (await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(q)}`)).json();
+    const names=(ac.data||[]).slice(0,8);
+    const cards=await Promise.all(names.map(n=>fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(n)}`).then(x=>x.json())));
+    const wn=wantNames();
+    r.innerHTML=cards.map(c=>{
+      const on=wn.has(c.name.toLowerCase());
+      const id=c.id;
+      return `<div class="card${on?' want':''}">
+        <button class="heart${on?' on':''}" data-name="${c.name.replace(/"/g,'&quot;')}" data-id="${id}" data-set="${(c.set||'').toUpperCase()}" data-cn="${c.collector_number||''}">${on?'♥':'♡'}</button>
+        <img loading="lazy" src="${scryImg(id)}" onerror="this.style.opacity=.15">
+        <div class="info"><div class="name">${c.name}</div><div class="meta">${(c.set||'').toUpperCase()} #${c.collector_number||''}</div></div></div>`;
+    }).join("");
+    r.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant(h.dataset));
+  }catch(e){ r.innerHTML=`<p class="hint">Kunne ikke søge: ${e.message}</p>`; }
+}
+
+async function toggleWant(d){
+  const i=myWants.findIndex(w=>w.name.toLowerCase()===d.name.toLowerCase());
+  if(i>=0){ myWants.splice(i,1); toast("Fjernet fra wants"); }
+  else { myWants.push({name:d.name, scryfallId:d.id, set:d.set, cn:d.cn}); toast("Tilføjet til wants"); }
+  await saveWants();
+  if($("wc"))$("wc").textContent=myWants.length;
+  drawMine(); doSearch($("search").value);
+}
+
+function drawMine(){
+  const m=$("mine"); if(!m)return;
+  m.innerHTML = myWants.length? myWants.map(w=>`<div class="card want">
+    <button class="heart on" data-name="${w.name.replace(/"/g,'&quot;')}">♥</button>
+    <img loading="lazy" src="${scryImg(w.scryfallId)}" onerror="this.style.opacity=.15">
+    <div class="info"><div class="name">${w.name}</div><div class="meta">${w.set||''} ${w.cn?'#'+w.cn:''}</div></div></div>`).join("")
+    : `<p class="hint">Ingen wants endnu. Søg et kort ovenfor og tryk på hjertet.</p>`;
+  m.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant({name:h.dataset.name}));
+}
+
+async function importDeck(){
+  const url=prompt("Indsæt Archidekt- eller Moxfield-URL (deck eller wishlist):");
+  if(!url)return;
+  try{
+    let names=[];
+    let m=url.match(/archidekt\.com\/(?:decks|collection)\/(\d+)/);
+    if(m){
+      const j=await (await fetch(`https://archidekt.com/api/decks/${m[1]}/`)).json();
+      names=(j.cards||[]).map(r=>r.card?.oracleCard?.name).filter(Boolean);
+    } else if((m=url.match(/moxfield\.com\/(?:decks|collection)\/([\w-]+)/))){
+      const j=await (await fetch(`https://api2.moxfield.com/v1/collections/${m[1]}?pageSize=1000`)).json();
+      names=(j.data||[]).map(r=>(r.card||r).name).filter(Boolean);
+    } else { toast("Ukendt URL"); return; }
+    const have=wantNames(); let added=0;
+    for(const n of [...new Set(names)]){ if(!have.has(n.toLowerCase())){ myWants.push({name:n}); added++; } }
+    await saveWants();
+    toast(`Importerede ${added} nye wants`);
+    if($("wc"))$("wc").textContent=myWants.length; drawMine();
+  }catch(e){ toast("Import fejlede (CORS?) — prøv den anden platform"); }
+}
+
+// ---------- Matches ----------
+async function renderMatches(){
+  view.innerHTML=`<div id="mstat" style="color:var(--muted);margin-bottom:12px">Henter...</div><div id="mb"></div>`;
+  const m=await getDoc(doc(db,"matches",user.uid));
+  const users=(await getDocs(collection(db,"users"))).docs.reduce((a,d)=>(a[d.id]=d.data().name,a),{});
+  const data=m.exists()?m.data():{};
+  const entries=Object.entries(data).sort((a,b)=>(b[1].totalEur||0)-(a[1].totalEur||0));
+  $("mstat").textContent = entries.length? "" : "Ingen matches endnu — tilføj wants og vent på næste nat-sync.";
+  $("mb").innerHTML = entries.map(([oid,mm])=>`<div class="matchbox">
+    <h2>💰 ${users[oid]||oid} har ${mm.cards.length} af dine wants — værdi ~${(mm.totalEur||0).toFixed(2)} €</h2>
+    ${mm.cards.map(h=>`<div class="pair">• ${h.name} — ${h.set||''} #${h.cn||''}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${h.eur.toFixed(2)} €</b>`:''} <span style="color:var(--muted)">(${h.binder||''})</span></div>`).join("")}
+  </div>`).join("");
+}
+
+// ---------- Profil ----------
+async function renderProfile(){
+  const snap=await getDoc(doc(db,"users",user.uid));
+  const d=snap.exists()?snap.data():{};
+  view.innerHTML=`<div class="field">
+    <label>Visningsnavn</label><input id="pname" value="${d.name||user.displayName}" style="width:100%">
+    <label>Google Drive mappe-ID (hvor dine ManaBox-backups ligger)</label>
+    <input id="pdrive" value="${d.driveFolderId||''}" placeholder="fx 1UT8G9VJIMg4..." style="width:100%">
+    <p class="hint">Del mappen med nat-jobbets service-konto (se SETUP-guiden), og indsæt mappe-ID'et
+    fra Drive-URL'en her. Nat-synket henter din nyeste backup automatisk.</p>
+    <button class="act primary" id="psave" style="margin-top:16px">Gem</button>
+  </div>`;
+  $("psave").onclick=async()=>{
+    await setDoc(doc(db,"users",user.uid),{name:$("pname").value.trim(),driveFolderId:$("pdrive").value.trim()},{merge:true});
+    toast("Profil gemt");
+  };
+}
 </script>
 </body>
 </html>
