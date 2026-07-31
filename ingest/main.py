@@ -77,6 +77,32 @@ def process_imports(db, uid: str, now: str) -> None:
     print(f"[{uid}] importerede {added} nye wants fra {len(urls)} liste(r)")
 
 
+def enrich_wants(db, uid: str, now: str) -> None:
+    """Giv wants uden scryfallId et billede-ID (fx importerede kort).
+    Normaliserer også gamle streng-wants til objekter."""
+    wref = db.collection("wants").document(uid)
+    cards = (wref.get().to_dict() or {}).get("cards", [])
+    cards = [{"name": c} if isinstance(c, str) else c for c in cards]
+    missing = [c for c in cards if not c.get("scryfallId")]
+    if not missing:
+        return
+    try:
+        lookup = import_lists.enrich([c["name"] for c in missing])
+    except Exception as e:
+        print(f"[{uid}] kunne ikke berige wants: {e}")
+        return
+    changed = 0
+    for c in cards:
+        if not c.get("scryfallId"):
+            info = lookup.get(c["name"].lower())
+            if info:
+                c.update(info)
+                changed += 1
+    if changed:
+        wref.set({"cards": cards, "updated": now}, merge=True)
+    print(f"[{uid}] berigede {changed} wants med billede")
+
+
 def main() -> int:
     sa_info = json.loads(os.environ["GCP_SA_KEY"])
     creds = service_account.Credentials.from_service_account_info(
@@ -93,6 +119,7 @@ def main() -> int:
     for u in users:
         uid = u["id"]
         process_imports(db, uid, now)   # flet evt. Archidekt/Moxfield-import ind
+        enrich_wants(db, uid, now)      # giv navne-kun-wants et billede-ID
         wants[uid] = load_wants(db, uid)
         if not u["driveFolderId"]:
             print(f"[{uid}] mangler driveFolderId - springer samling over")

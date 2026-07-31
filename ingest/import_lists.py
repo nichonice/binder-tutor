@@ -15,6 +15,30 @@ def _json(url: str):
     return json.load(urllib.request.urlopen(req))
 
 
+def enrich(names: list[str]) -> dict[str, dict]:
+    """Slå kortnavne op hos Scryfall og returnér
+    {navn.lower(): {'scryfallId', 'set', 'cn'}}.
+    Bruger /cards/collection (op til 75 identifiers pr. POST)."""
+    uniq = list({n for n in names if n})
+    out: dict[str, dict] = {}
+    for i in range(0, len(uniq), 75):
+        batch = uniq[i:i + 75]
+        body = json.dumps(
+            {"identifiers": [{"name": n} for n in batch]}).encode()
+        req = urllib.request.Request(
+            "https://api.scryfall.com/cards/collection", data=body,
+            headers={**HEADERS, "Content-Type": "application/json"},
+            method="POST")
+        j = json.load(urllib.request.urlopen(req))
+        for c in j.get("data", []):
+            out[c["name"].lower()] = {
+                "scryfallId": c["id"],
+                "set": (c.get("set") or "").upper(),
+                "cn": c.get("collector_number", ""),
+            }
+    return out
+
+
 def fetch_names(url: str) -> list[str]:
     """Returnér kortnavne fra en deck/collection/wishlist-URL."""
     m = re.search(r"archidekt\.com/(?:decks|collection)/(\d+)", url)
