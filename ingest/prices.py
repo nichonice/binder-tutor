@@ -1,8 +1,10 @@
 """Henter Scryfall bulk 'default_cards' og bygger et prisopslag
 pr. scryfall-ID. EUR-priser kommer fra Cardmarket via Scryfall.
 
-Scryfall kræver en beskrivende User-Agent + Accept-header på alle kald;
-uden dem svarer de HTTP 400 Bad Request."""
+Scryfall kræver en beskrivende User-Agent + Accept-header (ellers 400).
+Bulk-formatet er nu gzippet JSONL (ét kortobjekt pr. linje) med linket
+i feltet 'jsonl_download_uri' - ikke længere en JSON-array i 'download_uri'."""
+import gzip
 import json
 import urllib.request
 
@@ -17,26 +19,44 @@ def _get_json(url: str):
     return json.load(urllib.request.urlopen(req))
 
 
+def _get_bytes(url: str) -> bytes:
+    req = urllib.request.Request(url, headers=HEADERS)
+    return urllib.request.urlopen(req).read()
+
+
+def _add(out: dict, c: dict) -> None:
+    p = c.get("prices") or {}
+    eur = p.get("eur")
+    eurf = p.get("eur_foil")
+    out[c["id"]] = {
+        "eur": float(eur) if eur else None,
+        "eur_foil": float(eurf) if eurf else None,
+    }
+
+
 def load_price_map() -> dict[str, dict]:
     """Returnér {scryfallId: {'eur': float|None, 'eur_foil': float|None}}."""
-    # Hent hele bulk-data-listen og find default_cards-entryen - mere robust
-    # end by-type-endpointet, som kan svare uden download_uri.
-    listing = _get_json("https://api.scryfall.com/bulk-data")
-    entries = listing.get("data", [])
-    meta = next((e for e in entries if e.get("type") == "default_cards"), None)
-    if not meta or "download_uri" not in meta:
-        types = [e.get("type") for e in entries]
-        raise RuntimeError(f"default_cards ikke fundet i bulk-data (fik: {types})")
-    data = _get_json(meta["download_uri"])
-    out = {}
-    for c in data:
-        p = c.get("prices") or {}
-        eur = p.get("eur")
-        eurf = p.get("eur_foil")
-        out[c["id"]] = {
-            "eur": float(eur) if eur else None,
-            "eur_foil": float(eurf) if eurf else None,
-        }
+    meta = _get_json("https://api.scryfall.com/bulk-data/default_cards")
+
+    # Nyt format: gzippet JSONL i 'jsonl_download_uri'. Fald tilbage til
+    # den gamle JSON-array i 'download_uri', hvis Scryfall ruller tilbage.
+    jsonl_url = meta.get("jsonl_download_uri")
+    array_url = meta.get("download_uri")
+    if not jsonl_url and not array_url:
+        raise RuntimeError(f"intet download-link; felter: {sorted(meta.keys())}")
+
+    out: dict[str, dict] = {}
+    if jsonl_url:
+        raw = _get_bytes(jsonl_url)
+        if jsonl_url.endswith(".gz"):
+            raw = gzip.decompress(raw)
+        for line in raw.splitlines():
+            line = line.strip()
+            if line:
+                _add(out, json.loads(line))
+    else:
+        for c in _get_json(array_url):
+            _add(out, c)
     return out
 
 
