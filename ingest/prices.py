@@ -1,15 +1,26 @@
 """Henter Scryfall bulk 'default_cards' og bygger et prisopslag
-pr. scryfall-ID. EUR-priser kommer fra Cardmarket via Scryfall."""
+pr. scryfall-ID. EUR-priser kommer fra Cardmarket via Scryfall.
+
+Scryfall kræver en beskrivende User-Agent + Accept-header på alle kald;
+uden dem svarer de HTTP 400 Bad Request."""
 import json
 import urllib.request
+
+HEADERS = {
+    "User-Agent": "BinderTutor/1.0 (github.com/binder-tutor)",
+    "Accept": "application/json",
+}
+
+
+def _get_json(url: str):
+    req = urllib.request.Request(url, headers=HEADERS)
+    return json.load(urllib.request.urlopen(req))
 
 
 def load_price_map() -> dict[str, dict]:
     """Returnér {scryfallId: {'eur': float|None, 'eur_foil': float|None}}."""
-    meta = json.load(urllib.request.urlopen(
-        "https://api.scryfall.com/bulk-data/default-cards"))
-    url = meta["download_uri"]
-    data = json.load(urllib.request.urlopen(url))
+    meta = _get_json("https://api.scryfall.com/bulk-data/default-cards")
+    data = _get_json(meta["download_uri"])
     out = {}
     for c in data:
         p = c.get("prices") or {}
