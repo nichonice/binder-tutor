@@ -19,7 +19,14 @@ def _get_json(url: str):
 
 def load_price_map() -> dict[str, dict]:
     """Returnér {scryfallId: {'eur': float|None, 'eur_foil': float|None}}."""
-    meta = _get_json("https://api.scryfall.com/bulk-data/default-cards")
+    # Hent hele bulk-data-listen og find default_cards-entryen - mere robust
+    # end by-type-endpointet, som kan svare uden download_uri.
+    listing = _get_json("https://api.scryfall.com/bulk-data")
+    entries = listing.get("data", [])
+    meta = next((e for e in entries if e.get("type") == "default_cards"), None)
+    if not meta or "download_uri" not in meta:
+        types = [e.get("type") for e in entries]
+        raise RuntimeError(f"default_cards ikke fundet i bulk-data (fik: {types})")
     data = _get_json(meta["download_uri"])
     out = {}
     for c in data:
