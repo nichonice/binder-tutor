@@ -67,17 +67,14 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc }
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, arrayUnion }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== INDSÆT DIN FIREBASE-CONFIG HER (Project settings -> Web app) =====
 const firebaseConfig = {
-  apiKey: "AIzaSyA1X-i4H6rnmtzJnCPtqRUttGF1otH48qM",
-  authDomain: "binder-tutor.firebaseapp.com",
-  projectId: "binder-tutor",
-  storageBucket: "binder-tutor.firebasestorage.app",
-  messagingSenderId: "79518082195",
-  appId: "1:79518082195:web:2a294b814ee18730cb9966",
+  apiKey: "...",
+  authDomain: "DIT-PROJEKT.firebaseapp.com",
+  projectId: "DIT-PROJEKT",
 };
 // ========================================================================
 
@@ -234,24 +231,15 @@ function drawMine(){
 }
 
 async function importDeck(){
-  const url=prompt("Indsæt Archidekt- eller Moxfield-URL (deck eller wishlist):");
+  const url=prompt("Indsæt Archidekt- eller Moxfield-URL (deck/collection/wishlist):");
   if(!url)return;
-  try{
-    let names=[];
-    let m=url.match(/archidekt\.com\/(?:decks|collection)\/(\d+)/);
-    if(m){
-      const j=await (await fetch(`https://archidekt.com/api/decks/${m[1]}/`)).json();
-      names=(j.cards||[]).map(r=>r.card?.oracleCard?.name).filter(Boolean);
-    } else if((m=url.match(/moxfield\.com\/(?:decks|collection)\/([\w-]+)/))){
-      const j=await (await fetch(`https://api2.moxfield.com/v1/collections/${m[1]}?pageSize=1000`)).json();
-      names=(j.data||[]).map(r=>(r.card||r).name).filter(Boolean);
-    } else { toast("Ukendt URL"); return; }
-    const have=wantNames(); let added=0;
-    for(const n of [...new Set(names)]){ if(!have.has(n.toLowerCase())){ myWants.push({name:n}); added++; } }
-    await saveWants();
-    toast(`Importerede ${added} nye wants`);
-    if($("wc"))$("wc").textContent=myWants.length; drawMine();
-  }catch(e){ toast("Import fejlede (CORS?) — prøv den anden platform"); }
+  if(!/archidekt\.com\/(?:decks|collection)\/|moxfield\.com\/(?:decks|collection)\//.test(url)){
+    toast("Ukendt URL — kun Archidekt/Moxfield"); return;
+  }
+  // Archidekt/Moxfield blokerer browser-fetch (CORS), så nat-jobbet henter
+  // listen serverside. Vi gemmer bare URL'en på profilen.
+  await setDoc(doc(db,"users",user.uid), { pendingImports: arrayUnion(url) }, { merge:true });
+  toast("Import gemt — dine wants opdateres ved næste nat-sync");
 }
 
 // ---------- Matches ----------

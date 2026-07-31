@@ -18,6 +18,7 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 
 import fetch_drive
+import import_lists
 import match_wants
 import parse_manabox
 import prices
@@ -51,6 +52,31 @@ def load_wants(db, uid: str) -> list[str]:
     return [c["name"] if isinstance(c, dict) else c for c in cards]
 
 
+def process_imports(db, uid: str, now: str) -> None:
+    """Hent evt. pendingImports-URL'er (Archidekt/Moxfield) serverside og
+    flet kortnavnene ind i brugerens wants. Rydder listen bagefter."""
+    uref = db.collection("users").document(uid)
+    urls = (uref.get().to_dict() or {}).get("pendingImports", [])
+    if not urls:
+        return
+    wref = db.collection("wants").document(uid)
+    cards = (wref.get().to_dict() or {}).get("cards", [])
+    have = {(c["name"] if isinstance(c, dict) else c).lower() for c in cards}
+    added = 0
+    for url in urls:
+        try:
+            for n in import_lists.fetch_names(url):
+                if n.lower() not in have:
+                    cards.append({"name": n})
+                    have.add(n.lower())
+                    added += 1
+        except Exception as e:
+            print(f"[{uid}] import-fejl for {url}: {e}")
+    wref.set({"cards": cards, "updated": now}, merge=True)
+    uref.update({"pendingImports": firestore.DELETE_FIELD})
+    print(f"[{uid}] importerede {added} nye wants fra {len(urls)} liste(r)")
+
+
 def main() -> int:
     sa_info = json.loads(os.environ["GCP_SA_KEY"])
     creds = service_account.Credentials.from_service_account_info(
@@ -62,9 +88,11 @@ def main() -> int:
         print("Ingen brugere i Firestore endnu - log ind i appen først.")
         return 0
 
+    now = datetime.now(timezone.utc).isoformat()
     collections, wants = {}, {}
     for u in users:
         uid = u["id"]
+        process_imports(db, uid, now)   # flet evt. Archidekt/Moxfield-import ind
         wants[uid] = load_wants(db, uid)
         if not u["driveFolderId"]:
             print(f"[{uid}] mangler driveFolderId - springer samling over")
@@ -92,7 +120,6 @@ def main() -> int:
         print(f"Kunne ikke hente priser: {e}")
         pmap = {}
 
-    now = datetime.now(timezone.utc).isoformat()
     for u in users:
         uid = u["id"]
         if uid in collections:
