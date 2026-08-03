@@ -61,7 +61,7 @@ Firestore (data), GitHub Actions (scheduler), GitHub Pages (hosting).
 | `wants/{uid}` | klient + nat-job | `{cards: [{name, scryfallId, set, cn}], updated}` |
 | `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, listCount, chunks, binders[], updated}` |
 | `collections/{uid}/chunks/{n}` | nat-job | `{cards: [...]}` — se kortformat nedenfor |
-| `collections/{uid}/index/names` | nat-job | `{cards: [[navn, mode, eur, antal], ...]}` — kompakt indeks til matching i browseren |
+| `collections/{uid}/index/names` | nat-job | `{rows: ["navn\tmode\teur\tantal\n...", ...], count}` — kompakt indeks til matching i browseren |
 
 `uid` = Google-uid fra Firebase Auth.
 
@@ -79,8 +79,9 @@ Bemærk: felterne udelades hvis Scryfall-værdien er tom. Farveløse kort har de
 
 ### Navneindekset
 
-`collections/{uid}/index/names` er `{cards: [[navn, mode, eur, antal], ...]}`, hvor
-`mode` er `t`/`d`/`l` og navnet er lowercased. Ét entry pr. unikt kortnavn, med den
+`collections/{uid}/index/names` er `{rows: [...], count}`, hvor `rows` er tekstblokke
+med én tab-separeret linje pr. kort: `navn \t mode \t pris \t antal`. `mode` er
+`t`/`d`/`l` og navnet er lowercased. Ét entry pr. unikt kortnavn, med den
 mest handelsvenlige tilstand og højeste pris blandt eksemplarerne. Ejerens
 `binderMode` er allerede anvendt af nat-jobbet.
 
@@ -226,43 +227,50 @@ Disse er fundet gennem fejlfinding — respektér dem, så de ikke genopstår:
    DFC'er og split-kort** — de ligger på `card_faces[]`. `color_identity` og `cmc`
    ligger derimod altid på top-niveau. `prices._face_text()` samler faces med `//`.
 
-6. **Firestore-dokumenter må max fylde 1 MB.** Med regeltekst på kortene kan et fast
+6. **Firestore tillader IKKE arrays inde i arrays.** `{"cards": [[navn, mode], ...]}`
+   fejler med `400 Nested arrays are not allowed` — og først når man skriver, ikke
+   når man bygger dokumentet. Navneindekset gemmes derfor som en liste af
+   *tekstblokke* med tab-separerede linjer, hvilket samtidig er mere kompakt end
+   objekter (feltnavne gentages ikke pr. kort). Lokale tests der kun serialiserer
+   til JSON fanger det ikke — valider mod Firestores typeregler i stedet.
+
+7. **Firestore-dokumenter må max fylde 1 MB.** Med regeltekst på kortene kan et fast
    antal kort pr. chunk sprænge grænsen (planeswalkere/sagaer er lange). Derfor
    pakker `chunk_cards()` efter faktisk byte-størrelse. Testet: 5.000 kort med
    ~1,2 kB regeltekst hver → 12 chunks, største 0,67 MB.
 
-7. **Archidekt & Moxfield blokerer browser-fetch (CORS).** Import kan derfor ikke
+8. **Archidekt & Moxfield blokerer browser-fetch (CORS).** Import kan derfor ikke
    ske client-side. Løsning: klienten gemmer URL'en i `users/{uid}.pendingImports`,
    og nat-jobbet henter den serverside og fletter ind i wants.
 
-8. **Importerede wants mangler billeder**, fordi de kun har navn. `enrich_wants()`
+9. **Importerede wants mangler billeder**, fordi de kun har navn. `enrich_wants()`
    i nat-jobbet slår manglende kort op via Scryfalls `/cards/collection` (batch 75)
    og tilføjer `scryfallId`. Kører hver nat, så det er selvhelbredende.
 
-9. **ManaBox eksporterer lister og wishlists i SAMME CSV som samlingen.** Eneste
+10. **ManaBox eksporterer lister og wishlists i SAMME CSV som samlingen.** Eneste
    forskel er kolonnen `Binder Type`. Behandler man hver række som et fysisk kort,
    tælles kort dobbelt: har man ét eksemplar og også har kortet på en liste, står
    der to. Lister må aldrig tælle med i `cardCount`/`uniqueCount` eller optræde
    som match. Se `auto_mode()` i `main.py` og `binderMode` i afsnit 3.
 
-10. **Farveløse kort har tom `color_identity`.** I filterlogikken betyder det to ting:
+11. **Farveløse kort har tom `color_identity`.** I filterlogikken betyder det to ting:
    de matcher chippen "C", *og* de er "indeholdt i" enhver farveidentitet (et
    farveløst kort passer i alle decks). Behandl dem ikke som en femte farve.
 
-11. **Firebase web-apiKey er IKKE en hemmelighed** — den skal ligge i klartekst i
+12. **Firebase web-apiKey er IKKE en hemmelighed** — den skal ligge i klartekst i
     frontenden. GitHub secret-scanning flager den fejlagtigt; luk alarmen som
     "won't fix". Beskyttelsen er Firestore-rules, ikke nøglen. Læg dog API-key-
     restriktioner på i Google Cloud (HTTP referrers + API-restriktion) — og HUSK at
     inkludere `binder-tutor.firebaseapp.com/*` og `.web.app/*`, ellers brækker
     Google-login-handleren.
 
-12. **GitHub Pages cacher aggressivt.** Efter deploy: hard-refresh + cache-bust med
+13. **GitHub Pages cacher aggressivt.** Efter deploy: hard-refresh + cache-bust med
     `?v=N` i URL'en. Bekræft ny version via Ctrl+U (søg efter et kendt nyt string).
 
-13. **Config forsvinder ved fil-overskrivning.** Firebase-config er nu bagt ind i
+14. **Config forsvinder ved fil-overskrivning.** Firebase-config er nu bagt ind i
     `index.html`, så den ikke tabes når frontenden opdateres.
 
-14. **`README.md`, `firestore.rules` og `.gitignore` ligger med CRLF i working tree
+15. **`README.md`, `firestore.rules` og `.gitignore` ligger med CRLF i working tree
     men LF i git-indekset**, så de fremstår som fuldt ændrede i `git diff`. Brug
     `git add ingest web` frem for `git add -A` for at undgå støj i commits — eller
     ryd op én gang for alle med en `.gitattributes` (`* text=auto`).

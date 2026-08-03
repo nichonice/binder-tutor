@@ -198,6 +198,35 @@ def name_index(cards: list[dict], modes: dict) -> list[list]:
     return [[n, MODE_CHAR[v[0]], v[1], v[2]] for n, v in sorted(best.items())]
 
 
+def pack_index(idx: list[list], max_bytes: int = 900_000) -> list[str]:
+    """Pak navneindekset til tab-separerede linjer, samlet i tekstblokke.
+
+    Firestore tillader IKKE arrays inde i arrays, så indekset kan ikke gemmes
+    som [[navn, mode, ...], ...]. En liste af strenge er tilladt, og tekst er
+    samtidig mere kompakt end JSON-objekter, hvor feltnavnene gentages pr. kort.
+    Blokkene holdes under dokumentgrænsen på 1 MB.
+
+    Linjeformat: navn \t mode \t pris \t antal   (pris tom hvis ukendt)
+    Kortnavne kan ikke indeholde tab eller linjeskift, så formatet er entydigt."""
+    rows = [
+        "\t".join([n, ch, "" if eur is None else f"{eur:.2f}", str(qty)])
+        for n, ch, eur, qty in idx
+    ]
+    out: list[str] = []
+    buf: list[str] = []
+    size = 0
+    for r in rows:
+        b = len(r.encode("utf-8")) + 1
+        if buf and size + b > max_bytes:
+            out.append("\n".join(buf))
+            buf, size = [], 0
+        buf.append(r)
+        size += b
+    if buf:
+        out.append("\n".join(buf))
+    return out
+
+
 def chunk_cards(cards: list[dict]):
     """Del kortlisten op i bidder der sikkert holder sig under Firestores
     1 MB-grænse. Yield'er lister af kort."""
@@ -295,13 +324,15 @@ def main() -> int:
             # Kompakt navneindeks — frontenden matcher wants mod det i browseren,
             # så nye wants slår igennem med det samme i stedet for at vente et døgn.
             idx = name_index(cards, u.get("binderMode") or {})
+            rows = pack_index(idx)
             ref.collection("index").document("names").set({
-                "cards": idx,
+                "rows": rows,
                 "count": len(idx),
                 "updated": now,
             })
-            kb = len(json.dumps(idx, ensure_ascii=False).encode("utf-8")) / 1024
-            print(f"[{uid}] navneindeks: {len(idx)} unikke navne ({kb:.0f} kB)")
+            kb = sum(len(r.encode("utf-8")) for r in rows) / 1024
+            print(f"[{uid}] navneindeks: {len(idx)} unikke navne "
+                  f"({kb:.0f} kB i {len(rows)} blok(ke))")
 
     return 0
 

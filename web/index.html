@@ -328,6 +328,9 @@ onAuthStateChanged(auth, async u => {
   const snap = await getDoc(uref);
   if (!snap.exists()) {
     await setDoc(uref, { name: u.displayName, email: u.email, photoURL: u.photoURL, driveFolderId: "" });
+    // Helt nye brugere skal ikke mødes af "Nyt i version X" — de har ikke en
+    // gammel version at sammenligne med. De starter som ajour.
+    localStorage.setItem("bt.seen", APP_VERSION);
   }
   const w = await getDoc(doc(db, "wants", u.uid));
   myWants = w.exists() ? (w.data().cards || []) : [];
@@ -465,8 +468,18 @@ async function loadIndex(uid){
   if (idxCache[uid]) return idxCache[uid];
   const s = await getDoc(doc(db,"collections",uid,"index","names"));
   const m = new Map();
-  if (s.exists()) for (const [n, ch, eur, qty] of (s.data().cards || []))
-    m.set(n, { mode: MODE_FROM_CHAR[ch] || "trade", eur, qty });
+  if (s.exists()){
+    // rows er tekstblokke med én linje pr. kort: navn \t mode \t pris \t antal.
+    // (Firestore tillader ikke arrays inde i arrays, derfor tekst.)
+    for (const block of (s.data().rows || []))
+      for (const line of block.split("\n")){
+        if (!line) continue;
+        const [n, ch, eur, qty] = line.split("\t");
+        m.set(n, { mode: MODE_FROM_CHAR[ch] || "trade",
+                   eur: eur ? Number(eur) : null,
+                   qty: Number(qty) || 1 });
+      }
+  }
   idxCache[uid] = m;
   return m;
 }
@@ -509,10 +522,15 @@ async function scryfallNames(q){
 // ---------- Kom i gang ----------
 // Nye brugere lander på en tom Venner-fane uden at vide hvad de skal. Tjeklisten
 // bliver stående til trinnene er klaret, så ingen skal guides manuelt.
+// Læg ?preview=onboarding på URL'en for at se tjeklisten som en ny bruger, uanset
+// hvad din egen profil indeholder. Ændrer intet — kun visningen.
+const PREVIEW = new URLSearchParams(location.search).get("preview");
+
 function onboardingHtml(profile){
-  if (localStorage.getItem("bt.onbDone") === "1") return "";
-  const hasDrive = !!(profile && profile.driveFolderId);
-  const hasWants = myWants.length > 0;
+  const preview = PREVIEW === "onboarding";
+  if (!preview && localStorage.getItem("bt.onbDone") === "1") return "";
+  const hasDrive = !preview && !!(profile && profile.driveFolderId);
+  const hasWants = !preview && myWants.length > 0;
   if (hasDrive && hasWants) return "";
   const li = (done, html) => `<li class="${done?"done":""}">${html}</li>`;
   return `<div class="onb" id="onb">
