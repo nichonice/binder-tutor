@@ -92,6 +92,17 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .remind { max-width:900px; background:#33301c; border:1px solid var(--accent); border-radius:10px;
   padding:11px 14px; margin-top:12px; font-size:.87rem; line-height:1.5; }
 .remind b { color:var(--accent); }
+/* --- kom i gang --- */
+.onb { background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:16px 18px;
+  margin-bottom:16px; max-width:720px; }
+.onb h2 { font-size:1.05rem; margin-bottom:4px; }
+.onb .sub { font-size:.85rem; color:var(--muted); margin-bottom:12px; }
+.onb ol { margin:0 0 0 20px; }
+.onb li { font-size:.9rem; line-height:1.55; margin:8px 0; }
+.onb li.done { color:var(--muted); text-decoration:line-through; }
+.onb li.done::marker { content:"✓ "; }
+.onb code { background:#0d0e14; padding:3px 7px; border-radius:5px; font-size:.85em; word-break:break-all; }
+.onb .acts { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
 /* --- telefon --- */
 @media (max-width:640px) {
   header { padding:10px 12px; }
@@ -184,6 +195,15 @@ const firebaseConfig = {
 // bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
 const PATCH_NOTES = [
   {
+    v: "1.5", date: "3. august 2026",
+    title: "Matches opdaterer med det samme",
+    items: [
+      "**Ingen ventetid mere.** Sætter du et hjerte, dukker det op under Hvem har mine wants og i Trading Hub med det samme. Før skulle du vente til næste morgen, fordi matchingen kørte om natten.",
+      "**Kom i gang-tjekliste** for nye i gruppen, så man ikke lander på en tom side og skal spørge sig frem.",
+      "**Gem dine wants som fil** under Mine Wants. Din samling kan altid genskabes fra ManaBox, men dine wants findes kun i appen — tag en kopi en gang imellem. Filen kan læses ind igen, og den fletter ind i stedet for at overskrive.",
+    ],
+  },
+  {
     v: "1.4", date: "3. august 2026",
     title: "Bedre på telefon, og appen siger til når data er gamle",
     items: [
@@ -236,6 +256,10 @@ const PATCH_NOTES = [
   },
 ];
 const APP_VERSION = PATCH_NOTES[0].v;
+
+// Nat-jobbets service-konto — den adresse vennerne skal dele deres Drive-mappe
+// med. Står her så onboarding kan vise den; ret den hvis du laver nyt projekt.
+const SYNC_ACCOUNT = "binder-tutor-sync@binder-tutor.iam.gserviceaccount.com";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -430,6 +454,45 @@ const staleNote = updated => {
   return d == null ? "" : ` ⚠ ikke opdateret i ${d} dage`;
 };
 
+// ---------- Navneindeks (matching i browseren) ----------
+// Nat-jobbet skriver et kompakt indeks pr. person: [navn, mode, pris, antal].
+// Vi matcher wants mod det her i stedet for at vente på et nattekørsel — og
+// slipper for at hente alles fulde samlinger (flere MB) bare for at matche.
+const MODE_FROM_CHAR = { t:"trade", d:"deck", l:"list" };
+const idxCache = {};
+
+async function loadIndex(uid){
+  if (idxCache[uid]) return idxCache[uid];
+  const s = await getDoc(doc(db,"collections",uid,"index","names"));
+  const m = new Map();
+  if (s.exists()) for (const [n, ch, eur, qty] of (s.data().cards || []))
+    m.set(n, { mode: MODE_FROM_CHAR[ch] || "trade", eur, qty });
+  idxCache[uid] = m;
+  return m;
+}
+
+// Hvilke af mine wants har denne person — og er de reelt til handel?
+function hitsIn(index, wants, includeDeck){
+  const out = [];
+  for (const w of wants){
+    const n = String(w.name || w).toLowerCase();
+    const e = index.get(n) || index.get(front(n));
+    if (!e || e.mode === "list") continue;
+    if (e.mode === "deck" && !includeDeck) continue;
+    out.push({ name: w.name || w, scryfallId: w.scryfallId || "", ...e });
+  }
+  return out;
+}
+
+// Hent en persons fulde kortliste (kun når man åbner en konkret handel).
+async function loadCards(uid){
+  const meta = await getDoc(doc(db,"collections",uid));
+  if (!meta.exists()) return [];
+  const cs = await Promise.all(Array.from({length:meta.data().chunks||0},
+    (_,i)=>getDoc(doc(db,"collections",uid,"chunks",String(i)))));
+  return cs.flatMap(s=>s.exists()?s.data().cards:[]);
+}
+
 // ---------- Scryfall-søgning (avanceret syntaks) ----------
 async function scryfallNames(q){
   let url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards&order=name`;
@@ -443,6 +506,40 @@ async function scryfallNames(q){
   return { names, truncated: more };
 }
 
+// ---------- Kom i gang ----------
+// Nye brugere lander på en tom Venner-fane uden at vide hvad de skal. Tjeklisten
+// bliver stående til trinnene er klaret, så ingen skal guides manuelt.
+function onboardingHtml(profile){
+  if (localStorage.getItem("bt.onbDone") === "1") return "";
+  const hasDrive = !!(profile && profile.driveFolderId);
+  const hasWants = myWants.length > 0;
+  if (hasDrive && hasWants) return "";
+  const li = (done, html) => `<li class="${done?"done":""}">${html}</li>`;
+  return `<div class="onb" id="onb">
+    <h2>👋 Kom i gang</h2>
+    <div class="sub">To ting mangler, før de andre kan se din samling og du kan få matches.</div>
+    <ol>
+      ${li(hasDrive, `Del din ManaBox-mappe i Google Drive med sync-kontoen som <b>Viewer</b>:<br><code>${esc(SYNC_ACCOUNT)}</code> <button class="act" id="onbcopy" style="padding:4px 9px;font-size:.78rem">Kopiér</button>`)}
+      ${li(hasDrive, `Indsæt mappe-ID'et fra Drive-URL'en under <b>Min profil</b>. Det er den lange streng efter <code>/folders/</code>.`)}
+      ${li(hasWants, `Sæt hjerte på de kort du mangler — enten under <b>Mine Wants</b> eller direkte på kortene i en vens samling.`)}
+    </ol>
+    <div class="acts">
+      ${!hasDrive?`<button class="act primary" id="onbprof">Gå til Min profil</button>`:""}
+      ${!hasWants?`<button class="act" id="onbwants">Gå til Mine Wants</button>`:""}
+      <button class="act" id="onbhide" style="margin-left:auto">Skjul</button>
+    </div>
+  </div>`;
+}
+
+function bindOnboarding(){
+  if (!$("onb")) return;
+  if ($("onbcopy")) $("onbcopy").onclick = () =>
+    navigator.clipboard.writeText(SYNC_ACCOUNT).then(()=>toast("Adresse kopieret")).catch(()=>{});
+  if ($("onbprof"))  $("onbprof").onclick  = () => goto("profile");
+  if ($("onbwants")) $("onbwants").onclick = () => goto("wants");
+  $("onbhide").onclick = () => { localStorage.setItem("bt.onbDone","1"); $("onb").remove(); };
+}
+
 // ---------- Venner (samlinger) ----------
 const F = { q:"", text:"", type:"", colors:new Set(), cmode:"any", cmcMin:"", cmcMax:"",
             set:"", rar:new Set(), foil:"", cond:"", binder:"", lock:"", want:"",
@@ -450,6 +547,7 @@ const F = { q:"", text:"", type:"", colors:new Set(), cmode:"any", cmcMin:"", cm
 
 async function renderFriends() {
   view.innerHTML = `
+    <div id="onbslot"></div>
     <div class="row" style="margin-bottom:12px">
       <select id="who" style="min-width:200px"></select>
       <input id="q" placeholder="Søg kortnavn..." style="flex:1;min-width:160px">
@@ -520,6 +618,8 @@ async function renderFriends() {
     <button class="act" id="more" style="display:none;margin:16px auto">Vis flere</button>`;
 
   await loadUsers();
+  $("onbslot").innerHTML = onboardingHtml(usersById[user.uid]);
+  bindOnboarding();
   const cols = {};
   for (const u of Object.values(usersById)) {
     const c = await getDoc(doc(db,"collections",u.id));
@@ -732,12 +832,57 @@ function renderWants(){
     <button class="act" id="imp">Importér fra Archidekt/Moxfield</button></div>
     <div id="results" class="grid" style="margin-top:14px"></div>
   </div>
-  <h2 style="margin:24px 0 12px;font-size:1.1rem">❤️ Mine wants (<span id="wc">${myWants.length}</span>)</h2>
+  <div class="row" style="margin:24px 0 12px;align-items:baseline">
+    <h2 style="font-size:1.1rem">❤️ Mine wants (<span id="wc">${myWants.length}</span>)</h2>
+    <button class="act" id="wexp" style="margin-left:auto;padding:6px 11px;font-size:.82rem">Gem som fil</button>
+    <button class="act" id="wimpbtn" style="padding:6px 11px;font-size:.82rem">Indlæs fra fil</button>
+    <input type="file" id="wfile" accept="application/json,.json" style="display:none">
+  </div>
+  <p class="hint" style="margin:-6px 0 12px">Samlinger kan altid genskabes fra ManaBox — dine wants findes kun her. Tag en kopi en gang imellem.</p>
   <div id="mine" class="grid"></div>`;
   const sb=$("search"); let t;
   sb.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>doSearch(sb.value),300); };
   $("imp").onclick=importDeck;
+  $("wexp").onclick=exportWants;
+  $("wimpbtn").onclick=()=>$("wfile").click();
+  $("wfile").onchange=e=>importWantsFile(e.target.files[0]);
   drawMine();
+}
+
+function exportWants(){
+  const data = { app:"binder-tutor", version:APP_VERSION, exported:new Date().toISOString(),
+                 user:user.displayName, cards:myWants };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)], {type:"application/json"}));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `binder-tutor-wants-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`${myWants.length} wants gemt som fil`);
+}
+
+async function importWantsFile(file){
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    const incoming = Array.isArray(d) ? d : (d.cards || []);
+    if (!Array.isArray(incoming) || !incoming.length) return toast("Filen indeholder ingen wants");
+    // Flet ind frem for at overskrive — så en gammel backup ikke sletter nye wants.
+    const have = new Set(myWants.map(w => w.name.toLowerCase()));
+    let added = 0;
+    for (const c of incoming){
+      const name = typeof c === "string" ? c : c.name;
+      if (!name || have.has(String(name).toLowerCase())) continue;
+      myWants.push({ name:String(name), scryfallId:c.scryfallId||"", set:c.set||"", cn:c.cn||"" });
+      have.add(String(name).toLowerCase());
+      added++;
+    }
+    if (!added) return toast("Ingen nye wants i filen");
+    await saveWants();
+    if ($("wc")) $("wc").textContent = myWants.length;
+    drawMine();
+    toast(`${added} wants tilføjet`);
+  } catch(e){ toast(`Kunne ikke læse filen: ${e.message}`); }
 }
 
 async function doSearch(q){
@@ -802,28 +947,23 @@ async function renderMatches(){
       <label style="margin:0"><input type="checkbox" id="showlock" style="vertical-align:-2px"> Vis også kort der er låst til decks</label>
     </div>
     <div id="mstat" style="color:var(--muted);margin-bottom:12px">Henter...</div><div id="mb"></div>`;
-  const m=await getDoc(doc(db,"matches",user.uid));
   await loadUsers();
-  const data=m.exists()?m.data():{};
+  const others = Object.values(usersById).filter(u => u.id !== user.uid);
+  const idxs = await Promise.all(others.map(u => loadIndex(u.id)));
 
   function draw(){
     const showLocked = $("showlock").checked;
-    const rows = Object.entries(data).map(([oid,mm])=>{
-      const modes = modesOf(oid);
-      const cards = (mm.cards||[]).map(h=>({...h, _mode:modeOf(h,modes)}))
-                                  // lister er ikke fysiske kort — aldrig et match
-                                  .filter(h=>h._mode !== "list")
-                                  .filter(h=>showLocked || h._mode !== "deck");
-      const total = cards.reduce((s,h)=>s+(h.eur||0)*(h.qty||1),0);
-      return [oid, cards, total];
-    }).filter(([,cards])=>cards.length).sort((a,b)=>b[2]-a[2]);
+    const rows = others.map((u,i)=>{
+      const hits = hitsIn(idxs[i], myWants, showLocked);
+      return [u, hits, hits.reduce((s,h)=>s+(h.eur||0),0)];
+    }).filter(([,hits])=>hits.length).sort((a,b)=>b[2]-a[2]);
 
-    $("mstat").textContent = rows.length ? "" :
-      (Object.keys(data).length ? "Ingen matches til handel — prøv at vise låste kort også."
-                                : "Ingen matches endnu — tilføj wants og vent på næste nat-sync.");
-    $("mb").innerHTML = rows.map(([oid,cards,total])=>`<div class="matchbox">
-      <h2>💰 ${esc(usersById[oid]?.name || oid)} har ${cards.length} af dine wants — værdi ~${money(total)}</h2>
-      ${cards.map(h=>`<div class="pair${h._mode==="deck"?' locked':''}">• ${esc(h.name)} — ${esc(h.set||'')} #${esc(h.cn||'')}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''} <span style="color:var(--muted)">(${esc(h.binder||'ingen binder')})</span>${h._mode==="deck"?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
+    $("mstat").textContent = rows.length ? ""
+      : myWants.length ? "Ingen af dine wants findes hos de andre lige nu — prøv at vise deck-kort også."
+      : "Du har ingen wants endnu. Sæt et hjerte på et kort, så dukker der matches op med det samme.";
+    $("mb").innerHTML = rows.map(([u,hits,total])=>`<div class="matchbox">
+      <h2>💰 ${esc(u.name || u.id)} har ${hits.length} af dine wants — værdi ~${money(total)}</h2>
+      ${hits.map(h=>`<div class="pair${h.mode==="deck"?' locked':''}">• ${esc(h.name)}${h.qty>1?` x${h.qty}`:''}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''}${h.mode==="deck"?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
     </div>`).join("");
   }
   $("showlock").onchange = draw;
@@ -843,36 +983,28 @@ async function renderTrade(){
   const myModes = modesOf(user.uid);
   const myBlock = new Set(meDoc.notForTrade || []);
 
-  // Min egen samling
+  // Min egen samling (fuld — jeg skal alligevel kunne vise mine egne kortdetaljer)
   const meta = await getDoc(doc(db,"collections",user.uid));
-  let myCards = [];
-  if (meta.exists()){
-    const cs = await Promise.all(Array.from({length:meta.data().chunks||0},
-      (_,i)=>getDoc(doc(db,"collections",user.uid,"chunks",String(i)))));
-    myCards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
-  }
+  const myCards = meta.exists() ? await loadCards(user.uid) : [];
   const myTrade = myCards.filter(c => modeOf(c, myModes) === "trade");
 
-  // Alles wants + hvad de har som jeg mangler
   const others = Object.values(usersById).filter(u => u.id !== user.uid);
-  const [wantSnaps, mSnap] = await Promise.all([
+  // Alles wants + alles navneindeks. Begge dele er små, så begge retninger
+  // regnes live — ingen af dem venter på nat-synket.
+  const [wantSnaps, idxs, colMetas] = await Promise.all([
     Promise.all(others.map(u => getDoc(doc(db,"wants",u.id)))),
-    getDoc(doc(db,"matches",user.uid)),
+    Promise.all(others.map(u => loadIndex(u.id))),
+    Promise.all(others.map(u => getDoc(doc(db,"collections",u.id)))),
   ]);
-  const mData = mSnap.exists() ? mSnap.data() : {};
-
-  // Hvor gammel er hver persons samling? Forældede data giver forkerte handler.
-  const colMetas = await Promise.all(others.map(u => getDoc(doc(db,"collections",u.id))));
   const updatedBy = {};
   others.forEach((u,i)=>{ updatedBy[u.id] = colMetas[i].exists() ? colMetas[i].data().updated : null; });
 
   const val = list => list.reduce((s,c)=>s+(c.eur||0),0);
   const pairs = others.map((u,i)=>{
-    const theirModes = modesOf(u.id);
     const theirBlock = new Set(u.notForTrade || []);
     // hans kort som jeg vil have — kun det der reelt er til handel
-    const iGet = ((mData[u.id]||{}).cards || [])
-      .filter(c => modeOf(c, theirModes) === "trade" && !theirBlock.has(cardKey(c)));
+    const iGet = hitsIn(idxs[i], myWants, false)
+      .filter(h => !theirBlock.has(h.scryfallId));
     // mine kort som han vil have
     const w = new Set();
     (wantSnaps[i].exists() ? (wantSnaps[i].data().cards || []) : [])
@@ -903,9 +1035,22 @@ async function renderTrade(){
     r.onclick = () => buildTrade(pairs[Number(r.dataset.i)], myBlock));
 }
 
-function buildTrade(p, myBlock){
-  const sel = { get:new Set(p.iGet.map(cardKey)), give:new Set(p.theyGet.map(cardKey)) };
+async function buildTrade(p, myBlock){
   const name = p.u.name || p.u.id;
+  view.innerHTML = `<p class="hint">Henter ${esc(name)}s kort...</p>`;
+
+  // Oversigten kører på det kompakte navneindeks. Først her — for én person ad
+  // gangen — henter vi fulde kortdata, så vi kan vise sæt, stand og binder.
+  const theirCards = await loadCards(p.u.id);
+  const theirModes = modesOf(p.u.id);
+  const theirBlock = new Set(p.u.notForTrade || []);
+  const wantSet = new Set();
+  myWants.forEach(w => { wantSet.add(w.name.toLowerCase()); wantSet.add(front(w.name)); });
+  p = { ...p, iGet: theirCards.filter(c =>
+    modeOf(c, theirModes) === "trade" && !theirBlock.has(cardKey(c))
+    && (wantSet.has(c.name.toLowerCase()) || wantSet.has(front(c.name)))) };
+
+  const sel = { get:new Set(p.iGet.map(cardKey)), give:new Set(p.theyGet.map(cardKey)) };
 
   view.innerHTML = `
     <div class="row" style="margin-bottom:14px">

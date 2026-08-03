@@ -5,9 +5,12 @@ Kilder er nu 100% i Firestore - ingen friends.json / wants-txt mere:
   wants/{uid}    {cards: [{name, scryfallId, ...}]}
 
 Skriver:
-  collections/{uid}            meta: navn, kortantal, chunks, updated
-  collections/{uid}/chunks/{n} kortliste i bidder a 800
-  matches/{uid}                {ownerUid: {cards:[...], totalEur}}
+  collections/{uid}             meta: navn, kortantal, chunks, bindere, updated
+  collections/{uid}/chunks/{n}  fuld kortliste, opdelt efter byte-størrelse
+  collections/{uid}/index/names kompakt navneindeks til matching i browseren
+
+Matching sker i frontenden ud fra navneindekset, ikke her. Det gør at nye wants
+slår igennem med det samme i stedet for at vente på næste nattekørsel.
 """
 import json
 import os
@@ -19,7 +22,6 @@ from google.oauth2 import service_account
 
 import fetch_drive
 import import_lists
-import match_wants
 import parse_manabox
 import prices
 
@@ -40,21 +42,16 @@ def load_users(db) -> list[dict]:
     users = []
     for doc in db.collection("users").stream():
         d = doc.to_dict() or {}
+        modes = dict(d.get("binderMode") or {})
+        for b in (d.get("lockedBinders") or []):      # v1.1-arv
+            modes.setdefault(b, "deck")
         users.append({
             "id": doc.id,
             "name": d.get("name") or doc.id,
             "driveFolderId": d.get("driveFolderId", ""),
+            "binderMode": modes,
         })
     return users
-
-
-def load_wants(db, uid: str) -> list[str]:
-    """Want-kortnavne for én bruger (wants gemmes som objekter i appen)."""
-    doc = db.collection("wants").document(uid).get()
-    if not doc.exists:
-        return []
-    cards = (doc.to_dict() or {}).get("cards", [])
-    return [c["name"] if isinstance(c, dict) else c for c in cards]
 
 
 def process_imports(db, uid: str, now: str) -> None:
@@ -167,6 +164,40 @@ def binder_summary(cards: list[dict]) -> list[dict]:
     return sorted(agg.values(), key=lambda e: e["name"])
 
 
+MODE_CHAR = {"trade": "t", "deck": "d", "list": "l"}
+MODE_RANK = {"trade": 0, "deck": 1, "list": 2}
+
+
+def name_index(cards: list[dict], modes: dict) -> list[list]:
+    """Kompakt navneindeks: [navn, mode, bedste pris, antal] pr. unikt kortnavn.
+
+    Frontenden bruger det til at matche wants mod alles samlinger i browseren.
+    Et fuldt chunk-sæt fylder flere MB pr. person (regeltekst m.m.) og ville være
+    urimeligt at hente for hele gruppen på en telefon; det her er ~100 kB.
+    Fulde kortdata hentes først når en konkret handel åbnes.
+
+    Har man flere eksemplarer, vinder den mest handelsvenlige tilstand — ejer man
+    både et løst og et deck-bundet eksemplar, er kortet reelt til handel."""
+    best: dict[str, list] = {}
+    for c in cards:
+        binder = c.get("binder") or ""
+        mode = modes.get(binder) or auto_mode(c.get("binderType", ""))
+        n = (c.get("name") or "").lower().strip()
+        if not n:
+            continue
+        eur, qty = c.get("eur"), c.get("qty", 1)
+        cur = best.get(n)
+        if cur is None:
+            best[n] = [mode, eur, qty]
+        elif MODE_RANK[mode] < MODE_RANK[cur[0]]:
+            best[n] = [mode, eur, qty + (cur[2] if MODE_RANK[cur[0]] != 2 else 0)]
+        elif MODE_RANK[mode] == MODE_RANK[cur[0]]:
+            cur[2] += qty
+            if eur and (cur[1] is None or eur > cur[1]):
+                cur[1] = eur
+    return [[n, MODE_CHAR[v[0]], v[1], v[2]] for n, v in sorted(best.items())]
+
+
 def chunk_cards(cards: list[dict]):
     """Del kortlisten op i bidder der sikkert holder sig under Firestores
     1 MB-grænse. Yield'er lister af kort."""
@@ -195,12 +226,11 @@ def main() -> int:
         return 0
 
     now = datetime.now(timezone.utc).isoformat()
-    collections, wants = {}, {}
+    collections = {}
     for u in users:
         uid = u["id"]
         process_imports(db, uid, now)   # flet evt. Archidekt/Moxfield-import ind
         enrich_wants(db, uid, now)      # giv navne-kun-wants et billede-ID
-        wants[uid] = load_wants(db, uid)
         if not u["driveFolderId"]:
             print(f"[{uid}] mangler driveFolderId - springer samling over")
             continue
@@ -217,8 +247,6 @@ def main() -> int:
             print(f"[{uid}] {e}")
         except Exception as e:
             print(f"[{uid}] FEJL: {e}")
-
-    matrix = match_wants.build_matrix(users, collections, wants)
 
     # Hent kun de Scryfall-kort vi faktisk har brug for. Bulk-filen er ~500 MB,
     # så filtreringen sparer både hukommelse og tid.
@@ -264,20 +292,16 @@ def main() -> int:
             if n_list:
                 print(f"[{uid}] {n_list} kort ligger i lister (ikke talt som fysiske)")
 
-        match_doc = {}
-        for oid, hits in matrix.get(uid, {}).items():
-            enriched, total = [], 0.0
-            for h in hits:
-                h = enrich_card(h, cmap)
-                h.pop("text", None)     # regeltekst fylder for meget i matches
-                eur = h.get("eur")
-                enriched.append(h)
-                if eur:
-                    total += eur * h.get("qty", 1)
-            match_doc[oid] = {"cards": enriched, "totalEur": round(total, 2)}
-        db.collection("matches").document(uid).set(match_doc)
-        n_hits = sum(len(v["cards"]) for v in match_doc.values())
-        print(f"[{uid}] matches: {n_hits} kort hos andre")
+            # Kompakt navneindeks — frontenden matcher wants mod det i browseren,
+            # så nye wants slår igennem med det samme i stedet for at vente et døgn.
+            idx = name_index(cards, u.get("binderMode") or {})
+            ref.collection("index").document("names").set({
+                "cards": idx,
+                "count": len(idx),
+                "updated": now,
+            })
+            kb = len(json.dumps(idx, ensure_ascii=False).encode("utf-8")) / 1024
+            print(f"[{uid}] navneindeks: {len(idx)} unikke navne ({kb:.0f} kB)")
 
     return 0
 

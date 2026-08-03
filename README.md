@@ -21,9 +21,8 @@ ManaBox (hver bruger)
              ├─ fetch_drive.py   henter nyeste .csv pr. bruger
              ├─ parse_manabox.py CSV-parser (.backup er krypteret, kan ikke bruges)
              ├─ import_lists.py  Archidekt/Moxfield serverside (CORS)
-             ├─ match_wants.py   cross-matcher alles wants mod alles samlinger
              ├─ prices.py        Scryfall bulk → pris + gameplay-felter pr. kort
-             └─ skriver collections/{uid} + matches/{uid} tilbage
+             └─ skriver collections/{uid} + navneindeks tilbage
                   └─ web-appen læser live
 ```
 
@@ -75,8 +74,9 @@ Se den udførlige `binder-tutor-SETUP.md`. Kort fortalt:
 
 ### 3. Firestore rules
 Deploy `firestore.rules` (Console → Firestore → Rules, eller `firebase deploy
---only firestore:rules`). De giver: alle kan læse, du kan kun skrive dine egne
-`users/{uid}` og `wants/{uid}`, og `collections`/`matches` skrives kun af nat-jobbet.
+--only firestore:rules`). De giver: login kræves for at læse, du kan kun skrive dine
+egne `users/{uid}` og `wants/{uid}`, og `collections` skrives kun af nat-jobbet.
+Undercollections (`chunks`, `index`) har egne regler — rules cascader ikke.
 
 ### 4. Frontend
 1. Indsæt Firebase web-config i `web/index.html`
@@ -98,7 +98,7 @@ Deploy `firestore.rules` (Console → Firestore → Rules, eller `firebase deplo
 | `wants/{uid}` | klient + nat-job | `{cards: [{name, scryfallId, set, cn}], updated}` |
 | `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, listCount, chunks, binders[], updated}` |
 | `collections/{uid}/chunks/{n}` | nat-job | kortliste, opdelt efter byte-størrelse (≤ 1 MB/doc) |
-| `matches/{uid}` | nat-job | `{ownerUid: {cards:[...], totalEur}}` |
+| `collections/{uid}/index/names` | nat-job | `{cards: [[navn, mode, eur, antal], ...]}` — kompakt indeks til matching i browseren |
 
 Kort i chunks bærer ManaBox-felterne (`name, set, cn, foil, qty, condition, rarity,
 scryfallId, binder, binderType`) plus Scryfall-berigelse (`eur, cmc, ci, colors, type,
@@ -121,6 +121,8 @@ det tælles kort dobbelt.
       60 dages inaktivitet i repoet
 - [x] Advarsel i appen når en samling er over 30 dage gammel (`STALE_DAYS`)
 - [x] Mobiloptimering + oprydning i dødt kode
-- [ ] Flyt resten af matchingen til klienten (Trading Hub gør det allerede halvt)
-- [ ] Notifikationer ved nye matches (Discord-webhook i Action'en)
+- [x] Al matching flyttet til klienten via kompakt navneindeks — nye wants slår
+      igennem med det samme
+- [x] Kom i gang-tjekliste for nye brugere + eksport/import af wants
+- [ ] Notifikationer ved nye matches (Teams-webhook i Action'en)
 - [ ] App Store: share-sheet-upload i stedet for Drive-service-konto

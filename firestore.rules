@@ -26,14 +26,16 @@ service cloud.firestore {
     match /collections/{uid} {
       allow read: if loggedIn();
       allow write: if false;
+      // Fuld kortliste
       match /chunks/{n} {
         allow read: if loggedIn();
         allow write: if false;
       }
-    }
-    match /matches/{uid} {
-      allow read: if loggedIn();
-      allow write: if false;
+      // Kompakt navneindeks som frontenden matcher wants mod
+      match /index/{d} {
+        allow read: if loggedIn();
+        allow write: if false;
+      }
     }
   }
 }

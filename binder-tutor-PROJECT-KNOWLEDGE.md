@@ -4,8 +4,8 @@ Dette dokument samler alt relevant om Binder Tutor-projektet, så et Claude Proj
 kan arbejde videre uden at kende chathistorikken. Læg det ind som knowledge-fil i
 projektet.
 
-> **Sidst opdateret:** august 2026 (v1.2 — lister tælles ikke som fysiske kort,
-> patch notes i appen). Erstatter den tidligere version af dette dokument.
+> **Sidst opdateret:** august 2026 (v1.5 — matching flyttet til klienten,
+> onboarding, wants-backup). Erstatter den tidligere version af dette dokument.
 
 ---
 
@@ -19,8 +19,8 @@ job til Firestore, og vises i en statisk webapp med Google-login.
 **Ejer/udvikler:** Nicholas (IT-konsulent, ITAGIL ApS). Windows 11, PowerShell,
 bruger allerede GitHub + Firebase/Firestore til andre projekter.
 
-**Status:** v1.1 — kører i produktion for vennegruppen. Login, samlinger, wants,
-matching, priser, filtrering og binder-styring virker end-to-end.
+**Status:** v1.5 — kører i produktion for vennegruppen. Login, samlinger, wants,
+matching, priser, filtrering, binder-styring og Trading Hub virker end-to-end.
 
 **Designprincip:** eksterne data hentes fra autoritative tredjeparts-API'er frem
 for at blive vedligeholdt lokalt. Scryfall er eneste kilde til kortdata og priser;
@@ -43,9 +43,8 @@ ManaBox (hver bruger)
              ├─ fetch_drive.py   henter nyeste .csv pr. bruger
              ├─ parse_manabox.py parser CSV (.backup er krypteret, kan ikke bruges)
              ├─ import_lists.py  henter Archidekt/Moxfield-lister + Scryfall-berigelse
-             ├─ match_wants.py   cross-matcher alles wants mod alles samlinger
              ├─ prices.py        Scryfall bulk → pris + gameplay-felter (gzippet JSONL)
-             └─ skriver collections/{uid} + matches/{uid} tilbage
+             └─ skriver collections/{uid} + navneindeks tilbage
                   └─ webappen (GitHub Pages) læser live fra Firestore
 ```
 
@@ -62,7 +61,7 @@ Firestore (data), GitHub Actions (scheduler), GitHub Pages (hosting).
 | `wants/{uid}` | klient + nat-job | `{cards: [{name, scryfallId, set, cn}], updated}` |
 | `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, listCount, chunks, binders[], updated}` |
 | `collections/{uid}/chunks/{n}` | nat-job | `{cards: [...]}` — se kortformat nedenfor |
-| `matches/{uid}` | nat-job | `{ownerUid: {cards:[...], totalEur}}` |
+| `collections/{uid}/index/names` | nat-job | `{cards: [[navn, mode, eur, antal], ...]}` — kompakt indeks til matching i browseren |
 
 `uid` = Google-uid fra Firebase Auth.
 
@@ -78,8 +77,16 @@ Felter påført af **nat-jobbet fra Scryfall** (kun hvis `scryfallId` kan slås 
 Bemærk: felterne udelades hvis Scryfall-værdien er tom. Farveløse kort har derfor
 **ingen** `ci`-nøgle — frontenden skal behandle manglende/tom `ci` som farveløs.
 
-`matches`-hits bærer de samme felter **minus `text`**, som strippes fordi regeltekst
-ville sprænge match-dokumentet.
+### Navneindekset
+
+`collections/{uid}/index/names` er `{cards: [[navn, mode, eur, antal], ...]}`, hvor
+`mode` er `t`/`d`/`l` og navnet er lowercased. Ét entry pr. unikt kortnavn, med den
+mest handelsvenlige tilstand og højeste pris blandt eksemplarerne. Ejerens
+`binderMode` er allerede anvendt af nat-jobbet.
+
+Det er nøglen til at matche i browseren: en fuld samling fylder ~4,6 MB i chunks
+(regeltekst m.m.), indekset ~170 kB. Ti venners indeks er under 2 MB — acceptabelt
+på mobil, hvilket alles fulde samlinger ikke ville være.
 
 ### `binderMode` — handel vs. deck vs. liste
 
@@ -107,13 +114,12 @@ fallback (alle navne i listen tolkes som `deck`), så ingen skal sætte op igen.
 
 ### Security rules
 
-Alle kan læse; du kan kun skrive dine egne `users`/`wants`; `collections`/`matches`
-skrives kun af nat-jobbet (Admin SDK går udenom rules).
+Login kræves for at læse noget som helst (`request.auth != null`). Du kan kun skrive
+dine egne `users`/`wants`; `collections` og undercollections skrives kun af nat-jobbet
+(Admin SDK går udenom rules).
 
-> ⚠️ **Åbent punkt:** `allow read: if true` betyder at enhver der kender `projectId`
-> (som står i klartekst i frontenden, som den skal) kan læse hele `users`-collection
-> inkl. e-mailadresser — uden at logge ind. `allow read: if request.auth != null;`
-> lukker det uden at koste funktionalitet. Ikke implementeret endnu.
+> Husk at `index`-undercollection skal have sin egen `match`-blok — Firestore-rules
+> cascader ikke ned i undercollections.
 
 ---
 
@@ -129,7 +135,6 @@ binder-tutor/
 │  ├─ fetch_drive.py     nyeste .csv fra Drive (filtrerer i Python, ikke i query)
 │  ├─ parse_manabox.py   CSV-parser (+ .backup sniffer der giver klar fejl)
 │  ├─ import_lists.py    Archidekt/Moxfield-fetch + Scryfall enrich() (batch 75)
-│  ├─ match_wants.py     navnebaseret matching, håndterer DFC-frontfaces
 │  ├─ prices.py          Scryfall bulk → load_card_map(ids) (pris + gameplay)
 │  └─ requirements.txt   google-cloud-firestore, google-api-python-client, google-auth
 └─ web/
@@ -154,12 +159,12 @@ Firebase web-config er bagt ind i `web/index.html` (projekt: `binder-tutor`).
 ud fra data der allerede er læsbare — ingen nye Firestore-felter ud over
 `users/{uid}.notForTrade[]`:
 
-- *hvad de har som jeg vil have* ← `matches/{mit uid}` (fra nat-jobbet)
+- *hvad de har som jeg vil have* ← deres navneindeks ∩ mine `wants`
 - *hvad jeg har som de vil have* ← min egen `collections`-chunks ∩ deres `wants`
 
-Derfor slår et nyt hjerte igennem med det samme i den ene retning, uden at vente på
-nat-synket. Koster ca. 18 doc-reads for oversigten; detaljevisningen koster nul ekstra,
-fordi kortlisterne allerede er hentet.
+Begge retninger er live — et nyt hjerte slår igennem med det samme. Oversigten koster
+ca. 30 doc-reads (~2 MB for ti venner); først når man åbner en konkret handel hentes
+den persons fulde chunks, så sæt, stand og binder kan vises.
 
 Kun kort i `trade`-tilstand indgår — `deck` og `list` filtreres fra i begge retninger,
 og begge parters `notForTrade` respekteres. Rækkerne sorteres efter *gensidigt* fit
@@ -266,19 +271,13 @@ Disse er fundet gennem fejlfinding — respektér dem, så de ikke genopstår:
 
 ## 6. Åbne punkter / næste skridt
 
-- [ ] **Stram security rules:** `allow read: if request.auth != null;` så e-mails
-      ikke er offentligt læsbare (se afsnit 3).
-- [ ] **GitHub Actions deaktiverer scheduled workflows efter 60 dages inaktivitet
-      i repoet** og sender kun en mail. For et "færdigt" projekt er det den mest
-      sandsynlige måde nat-jobbet dør på. Løsning: keep-alive-commit, eller flyt
-      schedulen til Cloud Scheduler → Cloud Run job i samme GCP-projekt.
-- [ ] **Snappy matches:** matching sker kun nat. Den pæneste løsning er at flytte
-      matching helt til klienten — `collections/*/chunks/*` er allerede læsbare, og
-      10 venner × 5.000 kort er ~70 doc-reads og under 100 ms i JS. Så virker wants
-      øjeblikkeligt, og `match_wants.py` + `matches/` kan udgå af nat-jobbet.
-- [ ] **Discord-webhook** ved nye matches (holder appen levende).
-- [ ] **Dødt v1-kode:** `match_wants.load_wants()` læser stadig txt-filer og bruges
-      ikke af noget. Kan slettes.
+- [x] **Keep-alive** i `nightly.yml` — GitHub deaktiverer ellers schedulen efter
+      60 dages inaktivitet i repoet.
+- [x] **Snappy matches** — løst i v1.5 via navneindekset. `match_wants.py` og
+      `matches/`-collection er fjernet.
+- [ ] **Teams-webhook** ved nye matches — gruppen bruger Teams og Snapchat, ikke
+      Discord. Nicholas er Power Platform-konsulent, så en indgående webhook er
+      hurtigt sat op.
 - [ ] **App Store (fremtid):** brug native share-sheet-upload i stedet for Drive +
       service-konto. UNDGÅ `drive.readonly` OAuth-scope — det udløser årlig CASA-
       audit ($500-4500). `drive.file` + Google Picker er non-restricted alternativ.
