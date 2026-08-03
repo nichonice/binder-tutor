@@ -4,8 +4,8 @@ Dette dokument samler alt relevant om Binder Tutor-projektet, så et Claude Proj
 kan arbejde videre uden at kende chathistorikken. Læg det ind som knowledge-fil i
 projektet.
 
-> **Sidst opdateret:** august 2026 (v1.1 — filtre, EUR/DKK, hjerter i samlinger,
-> binder-styring). Erstatter den tidligere version af dette dokument.
+> **Sidst opdateret:** august 2026 (v1.2 — lister tælles ikke som fysiske kort,
+> patch notes i appen). Erstatter den tidligere version af dette dokument.
 
 ---
 
@@ -58,9 +58,9 @@ Firestore (data), GitHub Actions (scheduler), GitHub Pages (hosting).
 
 | Path | Skrives af | Indhold |
 |---|---|---|
-| `users/{uid}` | klient | `{name, email, photoURL, driveFolderId, pendingImports[], lockedBinders[]}` |
+| `users/{uid}` | klient | `{name, email, photoURL, driveFolderId, pendingImports[], binderMode{}}` |
 | `wants/{uid}` | klient + nat-job | `{cards: [{name, scryfallId, set, cn}], updated}` |
-| `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, chunks, binders[], updated}` |
+| `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, listCount, chunks, binders[], updated}` |
 | `collections/{uid}/chunks/{n}` | nat-job | `{cards: [...]}` — se kortformat nedenfor |
 | `matches/{uid}` | nat-job | `{ownerUid: {cards:[...], totalEur}}` |
 
@@ -81,12 +81,29 @@ Bemærk: felterne udelades hvis Scryfall-værdien er tom. Farveløse kort har de
 `matches`-hits bærer de samme felter **minus `text`**, som strippes fordi regeltekst
 ville sprænge match-dokumentet.
 
-### `lockedBinders` — handel vs. deck
+### `binderMode` — handel vs. deck vs. liste
 
-`users/{uid}.lockedBinders` er en liste af binder-navne som ejeren har markeret som
-låst til decks. Den håndhæves **kun i frontenden** — nat-jobbet skriver alle kort
-uanset status. Det er bevidst: ejeren kan ændre status uden at vente på et sync.
-Låste kort vises stadig (med `I DECK`-badge) men filtreres fra matches som standard.
+`collections/{uid}.binders` er en liste af objekter `{name, type, mode, unique, qty}`,
+hvor `type` er ManaBox' rå `Binder Type` og `mode` er den udledte status.
+
+`users/{uid}.binderMode` er et map `{"<bindernavn>": "trade"|"deck"|"list"}` med
+ejerens eventuelle overstyring:
+
+| mode | Betyder | Tæller i samlingen | Kan matches |
+|---|---|---|---|
+| `trade` | fysisk, til handel | ja | ja |
+| `deck` | fysisk, bundet i et deck | ja | kun hvis man slår "vis låste" til |
+| `list` | ikke fysisk (ManaBox-liste/wishlist) | **nej** | **nej** |
+
+Udledes af `Binder Type` når brugeren ikke har valgt: `list`/`wish` → `list`,
+`deck` → `deck`, ellers `trade`. Ejerens valg vinder altid.
+
+Håndhæves **både** i nat-jobbet (tællere) og i frontenden (visning og matches).
+Det er bevidst dobbelt: tællerne skal være rigtige i meta-dokumentet, men ejeren
+skal kunne ændre status uden at vente på et sync.
+
+Feltet hed `lockedBinders[]` i v1.1. Frontenden læser stadig det gamle felt som
+fallback (alle navne i listen tolkes som `deck`), så ingen skal sætte op igen.
 
 ### Security rules
 
@@ -131,6 +148,23 @@ Firebase web-config er bagt ind i `web/index.html` (projekt: `binder-tutor`).
 - Frontend `F`-objektet i `renderFriends()` holder al filterstate på modulniveau, så
   filtre overlever et valutaskift (som gentegner hele viewet).
 
+### Patch notes — hvordan man udgiver en ændring
+
+Vennegruppen er spredt over Teams og Snapchat, så udmeldinger sker **i appen**, ikke
+i chats. Patch notes bor i `PATCH_NOTES`-arrayet øverst i `web/index.html`:
+
+```js
+{ v:"1.3", date:"...", title:"...", items:["**Fed** tekst og `kode` virker"], todo:"..." }
+```
+
+Nyeste post øverst; `APP_VERSION` udledes automatisk af `PATCH_NOTES[0].v`. Bump
+versionen i samme commit som ændringen — så får alle en grøn prik på fanen og en
+banner, indtil de har åbnet fanen (`localStorage["bt.seen"]`). `todo`-feltet er til
+ting brugerne selv skal gøre, og vises fremhævet.
+
+Al tekst escapes før `**fed**` og `` `kode` `` oversættes, så notes kan ikke
+injicere HTML. Delebeskeden på Teams/Snapchat er derefter bare tre linjer + link.
+
 ---
 
 ## 5. Beslutninger & hårdt lærte lektier (VIGTIGT)
@@ -172,24 +206,30 @@ Disse er fundet gennem fejlfinding — respektér dem, så de ikke genopstår:
    i nat-jobbet slår manglende kort op via Scryfalls `/cards/collection` (batch 75)
    og tilføjer `scryfallId`. Kører hver nat, så det er selvhelbredende.
 
-9. **Farveløse kort har tom `color_identity`.** I filterlogikken betyder det to ting:
+9. **ManaBox eksporterer lister og wishlists i SAMME CSV som samlingen.** Eneste
+   forskel er kolonnen `Binder Type`. Behandler man hver række som et fysisk kort,
+   tælles kort dobbelt: har man ét eksemplar og også har kortet på en liste, står
+   der to. Lister må aldrig tælle med i `cardCount`/`uniqueCount` eller optræde
+   som match. Se `auto_mode()` i `main.py` og `binderMode` i afsnit 3.
+
+10. **Farveløse kort har tom `color_identity`.** I filterlogikken betyder det to ting:
    de matcher chippen "C", *og* de er "indeholdt i" enhver farveidentitet (et
    farveløst kort passer i alle decks). Behandl dem ikke som en femte farve.
 
-10. **Firebase web-apiKey er IKKE en hemmelighed** — den skal ligge i klartekst i
+11. **Firebase web-apiKey er IKKE en hemmelighed** — den skal ligge i klartekst i
     frontenden. GitHub secret-scanning flager den fejlagtigt; luk alarmen som
     "won't fix". Beskyttelsen er Firestore-rules, ikke nøglen. Læg dog API-key-
     restriktioner på i Google Cloud (HTTP referrers + API-restriktion) — og HUSK at
     inkludere `binder-tutor.firebaseapp.com/*` og `.web.app/*`, ellers brækker
     Google-login-handleren.
 
-11. **GitHub Pages cacher aggressivt.** Efter deploy: hard-refresh + cache-bust med
+12. **GitHub Pages cacher aggressivt.** Efter deploy: hard-refresh + cache-bust med
     `?v=N` i URL'en. Bekræft ny version via Ctrl+U (søg efter et kendt nyt string).
 
-12. **Config forsvinder ved fil-overskrivning.** Firebase-config er nu bagt ind i
+13. **Config forsvinder ved fil-overskrivning.** Firebase-config er nu bagt ind i
     `index.html`, så den ikke tabes når frontenden opdateres.
 
-13. **`README.md`, `firestore.rules` og `.gitignore` ligger med CRLF i working tree
+14. **`README.md`, `firestore.rules` og `.gitignore` ligger med CRLF i working tree
     men LF i git-indekset**, så de fremstår som fuldt ændrede i `git diff`. Brug
     `git add ingest web` frem for `git add -A` for at undgå støj i commits — eller
     ryd op én gang for alle med en `.gitattributes` (`* text=auto`).

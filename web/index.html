@@ -36,6 +36,7 @@ button.primary { background:var(--accent); color:#1a1a1a; border:none; font-weig
 .qty { background:rgba(0,0,0,.75); color:#fff; } .foil { background:linear-gradient(90deg,#c9a84c,#e8d48b); color:#1a1a1a; }
 .wantb { background:var(--want); color:#0c2214; }
 .lockb { background:var(--lock); color:#241008; }
+.listb { background:#5a6178; color:#e8e9ee; }
 .heart { position:absolute; top:6px; right:6px; width:34px; height:34px; border-radius:50%; border:none; cursor:pointer;
   background:rgba(0,0,0,.6); color:#fff; font-size:1.05rem; display:flex; align-items:center; justify-content:center; }
 .heart.on { background:var(--want); color:#0c2214; }
@@ -51,6 +52,20 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--card2); border:1px solid var(--accent);
   padding:10px 18px; border-radius:10px; font-size:.9rem; opacity:0; transition:opacity .2s; z-index:50; }
 #toast.show { opacity:1; }
+/* --- patch notes --- */
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--want); vertical-align:middle; margin-left:5px; }
+#newbar { margin-top:10px; background:#1c3326; border:1px solid var(--want); border-radius:10px; padding:9px 14px;
+  font-size:.87rem; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+#newbar b { color:var(--want); }
+#newbar button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.87rem; text-decoration:underline; padding:0; }
+.rel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px; max-width:720px; }
+.rel.newest { border-color:var(--want); }
+.rel h2 { font-size:1.05rem; margin-bottom:2px; }
+.rel .when { font-size:.78rem; color:var(--muted); margin-bottom:10px; }
+.rel .tag { font-size:.67rem; font-weight:700; padding:3px 8px; border-radius:20px; background:var(--want); color:#0c2214; margin-left:8px; vertical-align:middle; }
+.rel ul { margin:0 0 0 18px; } .rel li { font-size:.9rem; line-height:1.55; margin:5px 0; }
+.rel .todo { margin-top:12px; padding:10px 12px; background:var(--card2); border-radius:8px; font-size:.87rem; line-height:1.5; }
+.rel .todo b { color:var(--accent); }
 /* --- filterpanel --- */
 .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; display:none; }
 .panel.open { display:block; }
@@ -73,6 +88,7 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .seg button { background:var(--card2); color:var(--muted); border:none; padding:6px 12px; font-size:.78rem; cursor:pointer; }
 .seg button.on { background:var(--accent); color:#1a1a1a; font-weight:700; }
 .seg button.on.lock { background:var(--lock); color:#241008; }
+.seg button.on.list { background:#5a6178; color:#e8e9ee; }
 </style>
 </head>
 <body>
@@ -86,7 +102,9 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
     <button data-v="wants">Mine Wants</button>
     <button data-v="matches">Hvem har mine wants?</button>
     <button data-v="profile">Min profil</button>
+    <button data-v="patch">Patch notes <span class="dot" id="pdot" style="display:none"></span></button>
   </nav>
+  <div id="newbar" style="display:none"></div>
 </header>
 <div id="view"></div>
 <div id="toast"></div>
@@ -108,6 +126,43 @@ const firebaseConfig = {
   appId: "1:79518082195:web:2a294b814ee18730cb9966",
 };
 // =========================================================
+
+// ===== Patch notes =====
+// Nyeste øverst. Bump versionen når du tilføjer en note — så får alle en grøn
+// prik på fanen og en banner, indtil de har læst den. 'todo' er valgfri og
+// bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
+const PATCH_NOTES = [
+  {
+    v: "1.2", date: "3. august 2026",
+    title: "Lister tæller ikke længere som kort du ejer",
+    items: [
+      "**Dubletter er væk.** ManaBox eksporterer både din samling og dine lister i samme fil, og appen talte begge dele med. Havde du ét Roaming Throne og også havde det på en liste, stod der to. Nu tælles kun fysiske kort.",
+      "**Bindere har tre tilstande:** Til handel, Låst til deck, og Ikke fysisk (lister og wishlists). Appen gætter selv ud fra ManaBox, men du kan rette det.",
+      "**Matches viser kun kort folk faktisk ejer.** Ingen spørger længere efter et kort der kun står på en ønskeliste.",
+    ],
+    todo: "Kig forbi **Min profil → Mine bindere** og tjek at dine bindere har den rigtige status. Dine tidligere deck-valg er flyttet med automatisk.",
+  },
+  {
+    v: "1.1", date: "3. august 2026",
+    title: "Filtre, priser i kroner og hjerter direkte på kortene",
+    items: [
+      "**Filtrér samlinger** på farveidentitet, mana value, korttype, regeltekst, sæt, sjældenhed, foil, stand og pris — og sortér fx efter dyreste først.",
+      "**Farvefiltret \"indeholdt i\"** viser kun kort der må sidde i et deck med de valgte farver. Guld værd når du bygger.",
+      "**Scryfall-søgesyntaks** direkte i appen, fx `t:creature c:ur cmc<=3 o:\"draw a card\"`. Søger hos Scryfall og viser kun det personen ejer.",
+      "**Priser i kroner.** Knappen øverst til højre skifter mellem € og kr. Kursen er ECB's officielle dagskurs.",
+      "**Hjerte direkte på kortene** i andres samlinger — du skal ikke over på Mine Wants og søge kortet frem længere.",
+    ],
+    todo: "Del din ManaBox-mappe med sync-kontoen hvis du ikke har gjort det, og lav en frisk CSV-eksport — så kommer dine bindere med.",
+  },
+  {
+    v: "1.0", date: "Juli 2026",
+    title: "Early access",
+    items: [
+      "Google-login, samlinger fra ManaBox via Google Drive, wants med hjerte, automatisk matching hver nat og priser fra Scryfall.",
+    ],
+  },
+];
+const APP_VERSION = PATCH_NOTES[0].v;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -169,6 +224,7 @@ onAuthStateChanged(auth, async u => {
     renderCur(); show(currentView);
   };
   $("nav").style.display = "flex";
+  refreshPatchUI();
   await loadRate(); renderCur();
   // selv-registrering: opret/opdatér users/{uid}
   const uref = doc(db, "users", u.uid);
@@ -182,7 +238,7 @@ onAuthStateChanged(auth, async u => {
 });
 
 function renderLogin() {
-  $("nav").style.display = "none"; $("me").innerHTML = "";
+  $("nav").style.display = "none"; $("me").innerHTML = ""; $("newbar").style.display = "none";
   view.innerHTML = `<div class="center">
     <h1 style="font-size:1.6rem">🃏 Binder Tutor</h1>
     <p>Se vennegruppens Magic-samlinger, sæt hjerte på de kort du mangler, og find ud af
@@ -203,6 +259,49 @@ function show(v) {
   if (v==="wants") return renderWants();
   if (v==="matches") return renderMatches();
   if (v==="profile") return renderProfile();
+  if (v==="patch") return renderPatch();
+}
+
+function goto(v){
+  $("nav").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  show(v);
+}
+
+// ---------- Patch notes ----------
+const seenVersion = () => localStorage.getItem("bt.seen") || "";
+const hasUnseen = () => seenVersion() !== APP_VERSION;
+
+function refreshPatchUI(){
+  $("pdot").style.display = hasUnseen() ? "inline-block" : "none";
+  const bar = $("newbar");
+  if (!hasUnseen()) { bar.style.display = "none"; return; }
+  const n = PATCH_NOTES[0];
+  bar.style.display = "flex";
+  bar.innerHTML = `<span><b>Nyt i version ${esc(n.v)}:</b> ${esc(n.title)}</span>
+    <button id="nbopen">Se hvad der er ændret</button>
+    <button id="nbhide" style="margin-left:auto">Skjul</button>`;
+  $("nbopen").onclick = () => goto("patch");
+  $("nbhide").onclick = markSeen;
+}
+
+function markSeen(){
+  localStorage.setItem("bt.seen", APP_VERSION);
+  refreshPatchUI();
+}
+
+// Meget lille markup-hjælper: **fed** og `kode`. Alt escapes først.
+const fmt = s => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/`(.+?)`/g, '<code style="background:#0d0e14;padding:2px 5px;border-radius:4px;font-size:.85em">$1</code>');
+
+function renderPatch(){
+  view.innerHTML = PATCH_NOTES.map((n,i)=>`<div class="rel${i===0?" newest":""}">
+    <h2>${esc(n.title)}${i===0?`<span class="tag">NYESTE</span>`:""}</h2>
+    <div class="when">Version ${esc(n.v)} · ${esc(n.date)}</div>
+    <ul>${n.items.map(t=>`<li>${fmt(t)}</li>`).join("")}</ul>
+    ${n.todo?`<div class="todo"><b>Du skal:</b> ${fmt(n.todo)}</div>`:""}
+  </div>`).join("");
+  markSeen();
 }
 
 const wantNames = () => new Set(myWants.map(w => w.name.toLowerCase()));
@@ -218,9 +317,29 @@ async function loadUsers(){
   return usersById;
 }
 
-// Bindere ejeren har markeret som låst til decks (sættes i Min profil).
-const lockedOf = uid => new Set((usersById[uid]?.lockedBinders) || []);
-const isLocked = (c, locked) => !!(c.binder && locked.has(c.binder));
+// ---------- Binder-status ----------
+// ManaBox eksporterer både den fysiske samling og lister/wishlists i samme CSV.
+// Et kort i en liste er en reference til et kort man ejer i forvejen — ikke et
+// ekstra eksemplar — så det må hverken tælles med eller optræde i matches.
+//   trade = fysisk, til handel
+//   deck  = fysisk, men bundet i et deck
+//   list  = ikke fysisk
+// Ejerens eget valg (users/{uid}.binderMode) vinder over ManaBox' Binder Type.
+const MODE_LABEL = { trade:"Til handel", deck:"Låst til deck", list:"Ikke fysisk (liste)" };
+
+function autoMode(binderType){
+  const t = String(binderType||"").toLowerCase();
+  if (t.includes("list") || t.includes("wish")) return "list";
+  if (t.includes("deck")) return "deck";
+  return "trade";
+}
+function modesOf(uid){
+  const u = usersById[uid] || {};
+  const m = { ...(u.binderMode || {}) };
+  for (const b of (u.lockedBinders || [])) if (!m[b]) m[b] = "deck";  // bagudkompat
+  return m;
+}
+const modeOf = (c, modes) => (c.binder && modes[c.binder]) || autoMode(c.binderType);
 
 // ---------- Scryfall-søgning (avanceret syntaks) ----------
 async function scryfallNames(q){
@@ -268,8 +387,14 @@ async function renderFriends() {
           <div class="chips" id="rar">${[["common","C"],["uncommon","U"],["rare","R"],["mythic","M"]].map(([v,l])=>`<span class="chip" data-r="${v}">${l}</span>`).join("")}</div>
         </div>
         <div><label>Binder / deck</label><select id="binder"></select></div>
-        <div><label>Handelsstatus</label>
-          <select id="lock"><option value="">Alle</option><option value="trade">Kun til handel</option><option value="locked">Kun låst til decks</option></select>
+        <div><label>Binder-status</label>
+          <select id="lock">
+            <option value="">Kun fysiske kort</option>
+            <option value="trade">Kun til handel</option>
+            <option value="locked">Kun låst til decks</option>
+            <option value="list">Kun lister (ikke fysiske)</option>
+            <option value="all">Alt, inkl. lister</option>
+          </select>
         </div>
         <div><label>Foil</label><select id="foil"><option value="">Alle</option><option value="1">Kun foil</option><option value="0">Kun non-foil</option></select></div>
         <div><label>Stand</label><select id="cond"></select></div>
@@ -315,19 +440,21 @@ async function renderFriends() {
   $("who").innerHTML = ids.map(id=>`<option value="${esc(id)}">${esc(cols[id].name)} (${cols[id].uniqueCount||0} kort)</option>`).join("")
     || `<option>Ingen samlinger endnu</option>`;
 
-  let cards = [], filtered = [], shown = 0, ownerId = null, locked = new Set(), baseStatus = "";
+  let cards = [], filtered = [], shown = 0, ownerId = null, modes = {}, baseStatus = "";
 
   async function load(id){
     if(!cols[id]) return;
-    ownerId = id; locked = lockedOf(id);
+    ownerId = id; modes = modesOf(id);
     $("status").textContent = "Henter...";
     const cs = await Promise.all(Array.from({length:cols[id].chunks||0},(_,i)=>getDoc(doc(db,"collections",id,"chunks",String(i)))));
     cards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
     fillOptions(cols[id]);
     syncPanel();
-    const nLock = cards.filter(c=>isLocked(c,locked)).length;
-    baseStatus = `${cols[id].name}: ${cards.length} unikke · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`
-      + (nLock ? ` · ${nLock} låst til decks` : "");
+    const n = { trade:0, deck:0, list:0 };
+    cards.forEach(c => n[modeOf(c, modes)]++);
+    baseStatus = `${cols[id].name}: ${n.trade + n.deck} fysiske kort · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`
+      + (n.deck ? ` · ${n.deck} låst til decks` : "")
+      + (n.list ? ` · ${n.list} i lister (skjult)` : "");
     draw();
   }
 
@@ -337,9 +464,14 @@ async function renderFriends() {
       uniq("set").map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
     $("cond").innerHTML = `<option value="">Alle</option>` +
       uniq("condition").map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
-    const binders = (meta.binders && meta.binders.length) ? meta.binders : uniq("binder");
+    // meta.binders er objekter {name,type,mode,...}; ældre sync gav rene strenge.
+    const raw = (meta.binders && meta.binders.length) ? meta.binders : uniq("binder");
+    const binders = raw.map(b => typeof b === "string" ? { name:b } : b);
     $("binder").innerHTML = `<option value="">Alle bindere</option>` +
-      binders.map(b=>`<option value="${esc(b)}">${esc(b)}${locked.has(b)?" (låst)":""}</option>`).join("") +
+      binders.map(b=>{
+        const m = modes[b.name] || autoMode(b.type);
+        return `<option value="${esc(b.name)}">${esc(b.name)}${m!=="trade"?` (${MODE_LABEL[m].toLowerCase()})`:""}</option>`;
+      }).join("") +
       (binders.length ? "" : `<option disabled>ingen binder-data i eksporten</option>`);
     $("set").value = F.set; $("cond").value = F.cond; $("binder").value = F.binder;
   }
@@ -371,9 +503,11 @@ async function renderFriends() {
     if (F.cmcMax !== "" && !(Number(c.cmc ?? 1e9) <= Number(F.cmcMax))) return false;
     if (F.pmin !== "" && !(c.eur != null && c.eur >= toEur(Number(F.pmin)))) return false;
     if (F.pmax !== "" && !(c.eur != null && c.eur <= toEur(Number(F.pmax)))) return false;
-    const lock = isLocked(c, locked);
-    if (F.lock === "trade" && lock) return false;
-    if (F.lock === "locked" && !lock) return false;
+    const mode = modeOf(c, modes);
+    if (F.lock === "trade"  && mode !== "trade") return false;
+    if (F.lock === "locked" && mode !== "deck")  return false;
+    if (F.lock === "list"   && mode !== "list")  return false;
+    if (F.lock === ""       && mode === "list")  return false;   // standard: skjul lister
     const isW = wn.has(c.name.toLowerCase()) || wn.has(front(c.name));
     if (F.want === "1" && !isW) return false;
     if (F.want === "0" && isW) return false;
@@ -424,7 +558,7 @@ async function renderFriends() {
     const wn = wantNames();
     const slice = filtered.slice(shown, shown+100);
     $("grid").insertAdjacentHTML("beforeend", slice.map((c,i)=>
-      cardHtml(c, wn.has(c.name.toLowerCase()) || wn.has(front(c.name)), isLocked(c,locked), shown+i)).join(""));
+      cardHtml(c, wn.has(c.name.toLowerCase()) || wn.has(front(c.name)), modeOf(c,modes), shown+i)).join(""));
     shown += slice.length;
     $("more").style.display = shown < filtered.length ? "block" : "none";
     bindHearts();
@@ -486,10 +620,13 @@ async function renderFriends() {
   if (ids.length) load(ids[0]); else $("status").textContent = "Ingen samlinger synket endnu.";
 }
 
-function cardHtml(c, isWant, locked, idx){
+function cardHtml(c, isWant, mode, idx){
+  const dim = mode === "deck" || mode === "list";
+  const modeBadge = mode === "deck" ? `<span class="badge lockb">I DECK</span>`
+                  : mode === "list" ? `<span class="badge listb">LISTE</span>` : "";
   const p = c.eur != null ? `<div class="price">${money(c.eur)}${c.qty>1?` <span style="color:var(--muted);font-weight:400">· i alt ${money(c.eur*c.qty)}</span>`:""}</div>` : "";
-  return `<div class="card${isWant?' want':''}${locked?' locked':''}">
-    <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}${locked?`<span class="badge lockb">I DECK</span>`:""}</div>
+  return `<div class="card${isWant?' want':''}${dim?' locked':''}">
+    <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}${modeBadge}</div>
     ${idx!=null?`<button class="heart${isWant?' on':''}" data-i="${idx}" title="${isWant?'Fjern fra wants':'Tilføj til mine wants'}">${isWant?'♥':'♡'}</button>`:""}
     <img loading="lazy" src="${scryImg(c.scryfallId)}" onerror="this.style.opacity=.15">
     <div class="info"><div class="name">${esc(c.name)}</div>
@@ -581,9 +718,11 @@ async function renderMatches(){
   function draw(){
     const showLocked = $("showlock").checked;
     const rows = Object.entries(data).map(([oid,mm])=>{
-      const locked = lockedOf(oid);
-      const cards = (mm.cards||[]).map(h=>({...h, _lock:isLocked(h,locked)}))
-                                  .filter(h=>showLocked || !h._lock);
+      const modes = modesOf(oid);
+      const cards = (mm.cards||[]).map(h=>({...h, _mode:modeOf(h,modes)}))
+                                  // lister er ikke fysiske kort — aldrig et match
+                                  .filter(h=>h._mode !== "list")
+                                  .filter(h=>showLocked || h._mode !== "deck");
       const total = cards.reduce((s,h)=>s+(h.eur||0)*(h.qty||1),0);
       return [oid, cards, total];
     }).filter(([,cards])=>cards.length).sort((a,b)=>b[2]-a[2]);
@@ -593,7 +732,7 @@ async function renderMatches(){
                                 : "Ingen matches endnu — tilføj wants og vent på næste nat-sync.");
     $("mb").innerHTML = rows.map(([oid,cards,total])=>`<div class="matchbox">
       <h2>💰 ${esc(usersById[oid]?.name || oid)} har ${cards.length} af dine wants — værdi ~${money(total)}</h2>
-      ${cards.map(h=>`<div class="pair${h._lock?' locked':''}">• ${esc(h.name)} — ${esc(h.set||'')} #${esc(h.cn||'')}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''} <span style="color:var(--muted)">(${esc(h.binder||'ingen binder')})</span>${h._lock?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
+      ${cards.map(h=>`<div class="pair${h._mode==="deck"?' locked':''}">• ${esc(h.name)} — ${esc(h.set||'')} #${esc(h.cn||'')}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''} <span style="color:var(--muted)">(${esc(h.binder||'ingen binder')})</span>${h._mode==="deck"?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
     </div>`).join("");
   }
   $("showlock").onchange = draw;
@@ -605,8 +744,12 @@ async function renderProfile(){
   const snap=await getDoc(doc(db,"users",user.uid));
   const d=snap.exists()?snap.data():{};
   const col=await getDoc(doc(db,"collections",user.uid));
-  const binders=(col.exists()? (col.data().binders||[]) : []);
-  let lockedSet=new Set(d.lockedBinders||[]);
+  const raw=(col.exists()? (col.data().binders||[]) : []);
+  const binders=raw.map(b=>typeof b==="string"?{name:b}:b);
+  // Eksplicit valg vinder; ellers ManaBox' Binder Type; lockedBinders er v1.1-arv.
+  const saved={...(d.binderMode||{})};
+  for(const b of (d.lockedBinders||[])) if(!saved[b]) saved[b]="deck";
+  const modeFor=b=>saved[b.name]||autoMode(b.type);
 
   view.innerHTML=`<div class="field">
     <label>Visningsnavn</label><input id="pname" value="${esc(d.name||user.displayName)}" style="width:100%">
@@ -618,28 +761,34 @@ async function renderProfile(){
   </div>
 
   <h2 style="margin:28px 0 6px;font-size:1.1rem">📦 Mine bindere</h2>
-  <p class="hint" style="max-width:520px;margin-bottom:10px">Vælg hvad du handler fra. Kort i en låst binder
-  vises stadig for de andre, men markeres <span class="badge lockb">I DECK</span> og filtreres fra som standard,
-  så ingen spørger efter et kort der sidder i et deck.</p>
-  <div class="field" id="blist"></div>`;
+  <p class="hint" style="max-width:640px;margin-bottom:10px">
+  <b>Til handel</b> — fysiske kort andre må spørge efter.<br>
+  <b>Låst til deck</b> — fysiske kort du ejer, men som sidder i et deck. De vises for de andre
+  med <span class="badge lockb">I DECK</span>, men filtreres fra i matches.<br>
+  <b>Ikke fysisk</b> — ManaBox-lister og wishlists. De tæller hverken med i din samling eller i
+  matches. Uden det ville det samme kort blive talt to gange, hvis det både står i en liste og i din samling.</p>
+  <div class="field" id="blist" style="max-width:640px"></div>`;
 
   const bl=$("blist");
-  bl.innerHTML = binders.length ? binders.map((b,i)=>`<div class="binderrow">
-      <span class="nm">${esc(b)}</span>
+  bl.innerHTML = binders.length ? binders.map((b,i)=>{
+      const m=modeFor(b);
+      return `<div class="binderrow">
+      <span class="nm">${esc(b.name)}${b.unique?` <span style="color:var(--muted);font-size:.8rem">· ${b.unique} kort</span>`:""}${b.type?` <span style="color:var(--muted);font-size:.75rem">(${esc(b.type)})</span>`:""}</span>
       <span class="seg" data-i="${i}">
-        <button data-v="trade" class="${lockedSet.has(b)?'':'on'}">Til handel</button>
-        <button data-v="lock" class="lock ${lockedSet.has(b)?'on':''}">Låst til deck</button>
-      </span></div>`).join("")
+        <button data-v="trade" class="${m==="trade"?"on":""}">Til handel</button>
+        <button data-v="deck" class="lock ${m==="deck"?"on":""}">Låst til deck</button>
+        <button data-v="list" class="list ${m==="list"?"on":""}">Ikke fysisk</button>
+      </span></div>`;}).join("")
     : `<p class="hint">Ingen bindere fundet i din seneste ManaBox-eksport. Sørg for at eksporten
        indeholder kolonnen "Binder Name" — ellers kan alt kun behandles som ét samlet lager.</p>`;
 
   bl.querySelectorAll(".seg").forEach(seg => seg.querySelectorAll("button").forEach(btn => btn.onclick = async () => {
     const b = binders[Number(seg.dataset.i)];
-    btn.dataset.v === "lock" ? lockedSet.add(b) : lockedSet.delete(b);
+    saved[b.name] = btn.dataset.v;
     seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===btn));
-    await setDoc(doc(db,"users",user.uid), { lockedBinders:[...lockedSet] }, { merge:true });
-    if (usersById[user.uid]) usersById[user.uid].lockedBinders = [...lockedSet];
-    toast(`${b}: ${btn.dataset.v === "lock" ? "låst til deck" : "til handel"}`);
+    await setDoc(doc(db,"users",user.uid), { binderMode: saved }, { merge:true });
+    if (usersById[user.uid]) usersById[user.uid].binderMode = { ...saved };
+    toast(`${b.name}: ${MODE_LABEL[btn.dataset.v].toLowerCase()}`);
   }));
 
   $("psave").onclick=async()=>{

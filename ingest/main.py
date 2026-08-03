@@ -133,6 +133,40 @@ def enrich_card(card: dict, cmap: dict) -> dict:
     return out
 
 
+def auto_mode(binder_type: str) -> str:
+    """Udled binder-status af ManaBox' 'Binder Type'.
+
+    ManaBox eksporterer bade den fysiske samling OG lister/wishlists i samme CSV.
+    Et kort i en liste er en *reference* til et kort — ikke et ekstra fysisk
+    eksemplar — og ma derfor ikke taelle med i samlingen eller i matches.
+      trade = fysisk, til handel
+      deck  = fysisk, men bundet i et deck
+      list  = ikke fysisk
+    Ejeren kan overstyre pr. binder i appen (users/{uid}.binderMode)."""
+    t = (binder_type or "").lower()
+    if "list" in t or "wish" in t:
+        return "list"
+    if "deck" in t:
+        return "deck"
+    return "trade"
+
+
+def binder_summary(cards: list[dict]) -> list[dict]:
+    """Distinkte bindere med type og antal, så profilen kan tilbyde
+    handel/deck/liste-valg uden at læse hele samlingen."""
+    agg: dict[str, dict] = {}
+    for c in cards:
+        b = c.get("binder") or ""
+        if not b:
+            continue
+        e = agg.setdefault(b, {"name": b, "type": c.get("binderType", ""),
+                               "mode": auto_mode(c.get("binderType", "")),
+                               "unique": 0, "qty": 0})
+        e["unique"] += 1
+        e["qty"] += c.get("qty", 1)
+    return sorted(agg.values(), key=lambda e: e["name"])
+
+
 def chunk_cards(cards: list[dict]):
     """Del kortlisten op i bidder der sikkert holder sig under Firestores
     1 MB-grænse. Yield'er lister af kort."""
@@ -213,17 +247,22 @@ def main() -> int:
             for i, part in enumerate(chunk_cards(cards)):
                 ref.collection("chunks").document(str(i)).set({"cards": part})
                 n_chunks = i + 1
-            # Distinkte binder-navne, så profilen kan tilbyde handel/låst-valg
-            # uden at skulle læse hele samlingen.
-            binders = sorted({c["binder"] for c in cards if c.get("binder")})
+            # Tællerne skal vise den FYSISKE samling. Kort der kun ligger i en
+            # ManaBox-liste er referencer til kort man ejer i forvejen — tælles
+            # de med, ser man dubletter (fx "2 Roaming Throne" når man har én).
+            phys = [c for c in cards if auto_mode(c.get("binderType", "")) != "list"]
+            n_list = len(cards) - len(phys)
             ref.set({
                 "name": u["name"],
-                "cardCount": sum(c["qty"] for c in cards),
-                "uniqueCount": len(cards),
+                "cardCount": sum(c["qty"] for c in phys),
+                "uniqueCount": len(phys),
+                "listCount": n_list,
                 "chunks": n_chunks,
-                "binders": binders,
+                "binders": binder_summary(cards),
                 "updated": now,
             })
+            if n_list:
+                print(f"[{uid}] {n_list} kort ligger i lister (ikke talt som fysiske)")
 
         match_doc = {}
         for oid, hits in matrix.get(uid, {}).items():
