@@ -1,15 +1,7 @@
 """Cross-matcher alles wants mod alles samlinger.
-Wants-format: én kortnavn pr. linje, '#' er kommentar."""
 
-
-def load_wants(path: str) -> list[str]:
-    wants = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.split("#")[0].strip()
-            if line:
-                wants.append(line)
-    return wants
+Wants læses fra Firestore i main.py — den gamle txt-baserede load_wants()
+er fjernet sammen med resten af v1-filerne."""
 
 
 def _norm(name: str) -> str:

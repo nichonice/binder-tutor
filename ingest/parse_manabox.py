@@ -1,5 +1,8 @@
-"""Parsere for ManaBox-data. CSV virker nu; Drive-backup-formatet
-tilføjes i parse_backup() når vi har en prøvefil."""
+"""Parser for ManaBox' CSV-eksport.
+
+ManaBox' egen `.backup`-fil er AES-krypteret (Hive-box med nøglen i telefonens
+secure storage) og kan ikke læses serverside. CSV-eksporten er derfor eneste
+brugbare kilde — se `fetch_drive.newest_file()`, der prioriterer .csv."""
 import csv
 import io
 
@@ -36,20 +39,10 @@ def parse_csv(raw: bytes) -> list[dict]:
     return cards
 
 
-def parse_backup(raw: bytes) -> list[dict]:
-    """ManaBox Google Drive-backup. Format ukendt endnu -
-    upload en backup-fil, så bygger vi denne parser.
-    Sandsynligvis SQLite eller JSON: sniff magic bytes."""
-    if raw[:16] == b"SQLite format 3\x00":
-        raise NotImplementedError(
-            "Backup er SQLite - send en prøvefil, så mapper vi tabellerne.")
-    if raw[:2] in (b"PK", b"\x1f\x8b"):
-        raise NotImplementedError(
-            "Backup er zip/gzip-pakket - send en prøvefil.")
-    raise NotImplementedError("Ukendt backup-format - send en prøvefil.")
-
-
 def parse(filename: str, raw: bytes) -> list[dict]:
     if filename.lower().endswith(".csv"):
         return parse_csv(raw)
-    return parse_backup(raw)
+    raise NotImplementedError(
+        f"'{filename}' er ikke en CSV. ManaBox' .backup er krypteret og kan "
+        f"ikke læses her — lav en CSV-eksport i ManaBox og læg den i "
+        f"Drive-mappen.")

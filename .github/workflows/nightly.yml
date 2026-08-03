@@ -5,6 +5,9 @@ on:
     - cron: "0 2 * * *"   # 02:00 UTC = 04:00 dansk sommertid
   workflow_dispatch: {}    # manuel kørsel fra Actions-fanen
 
+permissions:
+  contents: write          # kræves af keep-alive-steppet nedenfor
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -23,3 +26,23 @@ jobs:
         env:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: python ingest/main.py
+
+      # GitHub deaktiverer schedulerede workflows efter 60 dages inaktivitet i
+      # repoet og sender kun en mail om det. Når projektet er "færdigt" og der
+      # ikke committes i to måneder, stopper nat-synket derfor lydløst.
+      # Vi laver en tom commit når vi nærmer os grænsen — kun ved den
+      # schedulerede kørsel, så manuelle kørsler ikke støjer i historikken.
+      - name: Hold schedulen i live
+        if: github.event_name == 'schedule'
+        run: |
+          days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Seneste commit er $days dage gammel."
+          if [ "$days" -ge 50 ]; then
+            git config user.name  "binder-tutor-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep-alive: holder nightly-schedulen aktiv"
+            git push
+            echo "Tom commit pushet — schedulen er nulstillet i 60 dage mere."
+          else
+            echo "Ingen handling nødvendig (grænsen er 60 dage)."
+          fi

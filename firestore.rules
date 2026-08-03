@@ -2,30 +2,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Profil: alle kan læse, men du kan kun skrive din egen
-    match /users/{uid} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid;
+    // Login kræves for at læse noget som helst. Uden dette kan enhver der
+    // kender projekt-ID'et (som står i klartekst i frontenden, som den skal)
+    // hente hele users-collection inkl. e-mailadresser uden at logge ind.
+    function loggedIn() {
+      return request.auth != null;
     }
 
-    // Wants: alle kan læse (så matching virker), du styrer kun dine egne
+    // Profil: alle indloggede kan læse, men du kan kun skrive din egen
+    match /users/{uid} {
+      allow read: if loggedIn();
+      allow write: if loggedIn() && request.auth.uid == uid;
+    }
+
+    // Wants: alle indloggede kan læse (så matching virker), du styrer kun dine egne
     match /wants/{uid} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if loggedIn();
+      allow write: if loggedIn() && request.auth.uid == uid;
     }
 
     // Samlinger og matches skrives KUN af nightly-jobbet (Admin SDK går
     // udenom disse rules). Klienten må kun læse.
     match /collections/{uid} {
-      allow read: if true;
+      allow read: if loggedIn();
       allow write: if false;
       match /chunks/{n} {
-        allow read: if true;
+        allow read: if loggedIn();
         allow write: if false;
       }
     }
     match /matches/{uid} {
-      allow read: if true;
+      allow read: if loggedIn();
       allow write: if false;
     }
   }

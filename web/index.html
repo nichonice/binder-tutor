@@ -92,6 +92,30 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .remind { max-width:900px; background:#33301c; border:1px solid var(--accent); border-radius:10px;
   padding:11px 14px; margin-top:12px; font-size:.87rem; line-height:1.5; }
 .remind b { color:var(--accent); }
+/* --- telefon --- */
+@media (max-width:640px) {
+  header { padding:10px 12px; }
+  #view { padding:12px; }
+  .brand { font-size:1.05rem; }
+  .me .nm { display:none; }              /* navnet fylder for meget i headeren */
+  nav { gap:5px; }
+  nav button { padding:9px 11px; font-size:.82rem; flex:1 1 auto; }
+  .grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+  .heart { width:44px; height:44px; font-size:1.25rem; }   /* tommelfingervenligt */
+  button.act, input, select { padding:11px 13px; font-size:.95rem; }  /* undgår iOS-zoom */
+  .fgrid { grid-template-columns:1fr; gap:14px; }
+  .chip { padding:9px 14px; font-size:.85rem; }
+  .fbar { flex-direction:column; align-items:stretch; }
+  .fbar select, .fbar button { width:100%; }
+  .tcols { grid-template-columns:1fr; }
+  .hubrow { flex-direction:column; align-items:flex-start; gap:6px; }
+  .bal { flex-direction:column; align-items:stretch; }
+  .bal button { margin-left:0 !important; width:100%; }
+  .binderrow { flex-direction:column; align-items:flex-start; gap:8px; }
+  .seg { width:100%; } .seg button { flex:1; padding:10px 6px; }
+  .titem { padding:10px 0; }
+  .titem input { width:20px; height:20px; }
+}
 /* --- filterpanel --- */
 .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; display:none; }
 .panel.open { display:block; }
@@ -159,6 +183,16 @@ const firebaseConfig = {
 // prik på fanen og en banner, indtil de har læst den. 'todo' er valgfri og
 // bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
 const PATCH_NOTES = [
+  {
+    v: "1.4", date: "3. august 2026",
+    title: "Bedre på telefon, og appen siger til når data er gamle",
+    items: [
+      "**Lavet til tommelfingre.** Filtre, Trading Hub og binder-opsætningen ligger nu pænt under hinanden på telefon, hjerterne er større at ramme, og felter zoomer ikke længere ind når du trykker på dem.",
+      "**Advarsel ved forældede samlinger.** Er en samling ikke opdateret i en måned, står det tydeligt — både i Venner, i Trading Hub og på din egen profil. Så opdager du det, hvis din Drive-mappe er holdt op med at virke.",
+      "Under motorhjelmen: nat-jobbet holder nu sig selv i live, så det ikke bliver slået fra af GitHub når der er stille i en periode. Og der kræves login for at læse data — før kunne man i teorien hente gruppens e-mailadresser uden at logge ind.",
+    ],
+    todo: "Ser du **⚠ ikke opdateret i X dage** ud for dit eget navn, så læg en frisk CSV-eksport fra ManaBox i din Drive-mappe.",
+  },
   {
     v: "1.3", date: "3. august 2026",
     title: "Trading Hub — se hvem du passer med begge veje",
@@ -254,7 +288,7 @@ onAuthStateChanged(auth, async u => {
   user = u;
   if (!u) return renderLogin();
   $("me").innerHTML = `<button class="act" id="cur" style="padding:5px 10px"></button>
-    <img src="${esc(u.photoURL)}"><span>${esc(u.displayName)}</span>
+    <img src="${esc(u.photoURL)}"><span class="nm">${esc(u.displayName)}</span>
     <button class="act" id="out" style="padding:5px 10px">Log ud</button>`;
   $("out").onclick = () => signOut(auth);
   $("cur").onclick = () => {
@@ -381,6 +415,21 @@ function modesOf(uid){
 }
 const modeOf = (c, modes) => (c.binder && modes[c.binder]) || autoMode(c.binderType);
 
+// ---------- Forældede samlinger ----------
+// Går en Drive-mappe i stykker, fejler nat-jobbet tavst for netop den person, og
+// de andre handler videre på forældede data. Vi siger det højt i stedet.
+const STALE_DAYS = 30;
+function ageInDays(updated){
+  if (!updated) return null;
+  const t = new Date(updated).getTime();
+  return isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
+}
+const isStale = updated => { const d = ageInDays(updated); return d != null && d >= STALE_DAYS; };
+const staleNote = updated => {
+  const d = ageInDays(updated);
+  return d == null ? "" : ` ⚠ ikke opdateret i ${d} dage`;
+};
+
 // ---------- Scryfall-søgning (avanceret syntaks) ----------
 async function scryfallNames(q){
   let url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards&order=name`;
@@ -494,7 +543,9 @@ async function renderFriends() {
     cards.forEach(c => n[modeOf(c, modes)]++);
     baseStatus = `${cols[id].name}: ${n.trade + n.deck} fysiske kort · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`
       + (n.deck ? ` · ${n.deck} låst til decks` : "")
-      + (n.list ? ` · ${n.list} i lister (skjult)` : "");
+      + (n.list ? ` · ${n.list} i lister (skjult)` : "")
+      + (isStale(cols[id].updated) ? staleNote(cols[id].updated) : "");
+    $("status").style.color = isStale(cols[id].updated) ? "var(--lock)" : "var(--muted)";
     draw();
   }
 
@@ -810,6 +861,11 @@ async function renderTrade(){
   ]);
   const mData = mSnap.exists() ? mSnap.data() : {};
 
+  // Hvor gammel er hver persons samling? Forældede data giver forkerte handler.
+  const colMetas = await Promise.all(others.map(u => getDoc(doc(db,"collections",u.id))));
+  const updatedBy = {};
+  others.forEach((u,i)=>{ updatedBy[u.id] = colMetas[i].exists() ? colMetas[i].data().updated : null; });
+
   const val = list => list.reduce((s,c)=>s+(c.eur||0),0);
   const pairs = others.map((u,i)=>{
     const theirModes = modesOf(u.id);
@@ -836,8 +892,9 @@ async function renderTrade(){
 
   $("hub").innerHTML = pairs.map((p,i)=>{
     const mutual = p.iGet.length && p.theyGet.length;
+    const stale = isStale(updatedBy[p.u.id]);
     return `<div class="hubrow" data-i="${i}">
-      <span class="who">${esc(p.u.name || p.u.id)}</span>
+      <span class="who">${esc(p.u.name || p.u.id)}${stale?`<span style="color:var(--lock);font-weight:400;font-size:.8rem">${staleNote(updatedBy[p.u.id])}</span>`:""}</span>
       <span class="leg">du får <b>${p.iGet.length}</b> (${money(val(p.iGet))}) · du giver <b>${p.theyGet.length}</b> (${money(val(p.theyGet))})</span>
       ${mutual?`<span class="fit">PASSER BEGGE VEJE</span>`:""}
     </div>`;
@@ -944,7 +1001,17 @@ async function renderProfile(){
   for(const b of (d.lockedBinders||[])) if(!saved[b]) saved[b]="deck";
   const modeFor=b=>saved[b.name]||autoMode(b.type);
 
-  view.innerHTML=`<div class="field">
+  const upd = col.exists() ? col.data().updated : null;
+  const warn = !col.exists()
+    ? `<div class="remind" style="max-width:520px;margin:0 0 16px"><b>Din samling er ikke synket endnu.</b>
+       Indsæt dit Drive mappe-ID nedenfor, og del mappen med nat-jobbets service-konto.</div>`
+    : isStale(upd)
+    ? `<div class="remind" style="max-width:520px;margin:0 0 16px"><b>Din samling er ${ageInDays(upd)} dage gammel.</b>
+       Nat-synket har ikke kunnet hente noget nyt. Tjek at der ligger en frisk CSV-eksport i din
+       Drive-mappe, og at mappen stadig er delt med service-kontoen. De andre handler ud fra det her.</div>`
+    : "";
+
+  view.innerHTML=`${warn}<div class="field">
     <label>Visningsnavn</label><input id="pname" value="${esc(d.name||user.displayName)}" style="width:100%">
     <label>Google Drive mappe-ID (hvor dine ManaBox-eksporter ligger)</label>
     <input id="pdrive" value="${esc(d.driveFolderId||'')}" placeholder="fx 1UT8G9VJIMg4..." style="width:100%">
