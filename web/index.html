@@ -66,6 +66,32 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .rel ul { margin:0 0 0 18px; } .rel li { font-size:.9rem; line-height:1.55; margin:5px 0; }
 .rel .todo { margin-top:12px; padding:10px 12px; background:var(--card2); border-radius:8px; font-size:.87rem; line-height:1.5; }
 .rel .todo b { color:var(--accent); }
+/* --- trading hub --- */
+.hubrow { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px;
+  max-width:720px; cursor:pointer; display:flex; gap:14px; align-items:center; }
+.hubrow:hover { border-color:var(--accent); }
+.hubrow .who { font-weight:600; flex:1; }
+.hubrow .leg { font-size:.85rem; color:var(--muted); }
+.hubrow .leg b { color:var(--text); font-weight:600; }
+.hubrow .fit { font-size:.7rem; font-weight:700; padding:3px 9px; border-radius:20px; background:var(--want); color:#0c2214; }
+.tcols { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; max-width:900px; }
+.tcol { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.tcol h3 { font-size:.95rem; margin-bottom:2px; }
+.tcol .sum { font-size:.8rem; color:var(--muted); margin-bottom:10px; }
+.titem { display:flex; gap:9px; align-items:flex-start; padding:7px 0; border-top:1px solid var(--line); font-size:.87rem; }
+.titem input { margin-top:3px; }
+.titem .tn { flex:1; line-height:1.35; }
+.titem .tm { font-size:.75rem; color:var(--muted); }
+.titem .tp { font-weight:700; color:var(--accent); white-space:nowrap; }
+.titem.off { opacity:.4; }
+.titem .drop { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.95rem; padding:0 2px; }
+.titem .drop:hover { color:var(--lock); }
+.bal { max-width:900px; background:var(--card2); border:1px solid var(--line); border-radius:12px;
+  padding:14px 16px; margin-top:14px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+.bal .big { font-size:1.05rem; font-weight:600; }
+.remind { max-width:900px; background:#33301c; border:1px solid var(--accent); border-radius:10px;
+  padding:11px 14px; margin-top:12px; font-size:.87rem; line-height:1.5; }
+.remind b { color:var(--accent); }
 /* --- filterpanel --- */
 .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; display:none; }
 .panel.open { display:block; }
@@ -101,6 +127,7 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
     <button data-v="friends" class="on">Venner</button>
     <button data-v="wants">Mine Wants</button>
     <button data-v="matches">Hvem har mine wants?</button>
+    <button data-v="trade">Trading Hub</button>
     <button data-v="profile">Min profil</button>
     <button data-v="patch">Patch notes <span class="dot" id="pdot" style="display:none"></span></button>
   </nav>
@@ -132,6 +159,18 @@ const firebaseConfig = {
 // prik på fanen og en banner, indtil de har læst den. 'todo' er valgfri og
 // bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
 const PATCH_NOTES = [
+  {
+    v: "1.3", date: "3. august 2026",
+    title: "Trading Hub — se hvem du passer med begge veje",
+    items: [
+      "**Ny fane: Trading Hub.** Indtil nu kunne du kun se hvad andre havde som du manglede. Nu ser du også hvad *du* har som *de* mangler — og det er jo dér en handel opstår.",
+      "**Handelsbygger.** Klik på en person og få begge lister side om side med afkrydsning, priser og en balance der viser hvem der giver mest. Sæt kryds ved det I bliver enige om.",
+      "**Kopiér handel som tekst** og paste den direkte i Snapchat eller Teams. Ingen skal logge ind for at læse et forslag.",
+      "**Har du et kort du alligevel ikke vil af med?** Tryk ✕ ud for det i din egen kolonne, så bliver det ikke tilbudt igen. Kort i decks og lister er allerede holdt udenfor.",
+      "Det hele regnes i browseren, så et nyt hjerte slår igennem med det samme — du skal ikke vente på nat-synket.",
+    ],
+    todo: "**Når I har byttet: scan de nye kort ind i ManaBox, og slet dem I gav væk fra jeres binder.** Ellers bliver appen ved med at matche på kort I ikke har længere — og så bliver den hurtigt ubrugelig for alle.",
+  },
   {
     v: "1.2", date: "3. august 2026",
     title: "Lister tæller ikke længere som kort du ejer",
@@ -258,6 +297,7 @@ function show(v) {
   if (v==="friends") return renderFriends();
   if (v==="wants") return renderWants();
   if (v==="matches") return renderMatches();
+  if (v==="trade") return renderTrade();
   if (v==="profile") return renderProfile();
   if (v==="patch") return renderPatch();
 }
@@ -736,6 +776,159 @@ async function renderMatches(){
     </div>`).join("");
   }
   $("showlock").onchange = draw;
+  draw();
+}
+
+// ---------- Trading Hub ----------
+// Alt regnes i browseren ud fra data der allerede er læsbare, så en ny want
+// slår igennem med det samme i stedet for at vente på nat-synket.
+const cardKey = c => c.scryfallId || `${c.name}|${c.set||""}|${c.cn||""}`;
+const REMINDER = "Husk begge to: scan de nye kort ind i ManaBox, og slet dem I byttede væk fra jeres binder. Ellers matcher appen videre på kort I ikke har længere.";
+
+async function renderTrade(){
+  view.innerHTML = `<div id="tstat" style="color:var(--muted);font-size:.9rem">Regner handelsmuligheder ud...</div><div id="hub"></div>`;
+  await loadUsers();
+  const meDoc = usersById[user.uid] || {};
+  const myModes = modesOf(user.uid);
+  const myBlock = new Set(meDoc.notForTrade || []);
+
+  // Min egen samling
+  const meta = await getDoc(doc(db,"collections",user.uid));
+  let myCards = [];
+  if (meta.exists()){
+    const cs = await Promise.all(Array.from({length:meta.data().chunks||0},
+      (_,i)=>getDoc(doc(db,"collections",user.uid,"chunks",String(i)))));
+    myCards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
+  }
+  const myTrade = myCards.filter(c => modeOf(c, myModes) === "trade");
+
+  // Alles wants + hvad de har som jeg mangler
+  const others = Object.values(usersById).filter(u => u.id !== user.uid);
+  const [wantSnaps, mSnap] = await Promise.all([
+    Promise.all(others.map(u => getDoc(doc(db,"wants",u.id)))),
+    getDoc(doc(db,"matches",user.uid)),
+  ]);
+  const mData = mSnap.exists() ? mSnap.data() : {};
+
+  const val = list => list.reduce((s,c)=>s+(c.eur||0),0);
+  const pairs = others.map((u,i)=>{
+    const theirModes = modesOf(u.id);
+    const theirBlock = new Set(u.notForTrade || []);
+    // hans kort som jeg vil have — kun det der reelt er til handel
+    const iGet = ((mData[u.id]||{}).cards || [])
+      .filter(c => modeOf(c, theirModes) === "trade" && !theirBlock.has(cardKey(c)));
+    // mine kort som han vil have
+    const w = new Set();
+    (wantSnaps[i].exists() ? (wantSnaps[i].data().cards || []) : [])
+      .forEach(x => { const n = (x.name||x); w.add(String(n).toLowerCase()); w.add(front(n)); });
+    const theyGet = myTrade.filter(c => !myBlock.has(cardKey(c))
+      && (w.has(c.name.toLowerCase()) || w.has(front(c.name))));
+    return { u, iGet, theyGet };
+  }).filter(p => p.iGet.length || p.theyGet.length)
+    .sort((a,b) => Math.min(b.iGet.length,b.theyGet.length) - Math.min(a.iGet.length,a.theyGet.length)
+                || (b.iGet.length+b.theyGet.length) - (a.iGet.length+a.theyGet.length));
+
+  if (!myCards.length) $("tstat").textContent =
+    "Du har ingen synket samling endnu, så vi kan kun vise hvad andre har til dig. Udfyld Drive-mappen under Min profil.";
+  else if (!pairs.length) $("tstat").textContent =
+    "Ingen handelsmuligheder lige nu. Sæt flere hjerter, eller vent til vennerne opdaterer deres samlinger.";
+  else $("tstat").textContent = `${pairs.length} ${pairs.length===1?"person":"personer"} du kan handle med. Sorteret efter hvor godt I passer begge veje.`;
+
+  $("hub").innerHTML = pairs.map((p,i)=>{
+    const mutual = p.iGet.length && p.theyGet.length;
+    return `<div class="hubrow" data-i="${i}">
+      <span class="who">${esc(p.u.name || p.u.id)}</span>
+      <span class="leg">du får <b>${p.iGet.length}</b> (${money(val(p.iGet))}) · du giver <b>${p.theyGet.length}</b> (${money(val(p.theyGet))})</span>
+      ${mutual?`<span class="fit">PASSER BEGGE VEJE</span>`:""}
+    </div>`;
+  }).join("");
+  $("hub").querySelectorAll(".hubrow").forEach(r =>
+    r.onclick = () => buildTrade(pairs[Number(r.dataset.i)], myBlock));
+}
+
+function buildTrade(p, myBlock){
+  const sel = { get:new Set(p.iGet.map(cardKey)), give:new Set(p.theyGet.map(cardKey)) };
+  const name = p.u.name || p.u.id;
+
+  view.innerHTML = `
+    <div class="row" style="margin-bottom:14px">
+      <button class="act" id="back">← Tilbage</button>
+      <h2 style="font-size:1.15rem;margin:0">Handel med ${esc(name)}</h2>
+    </div>
+    <div class="tcols">
+      <div class="tcol">
+        <h3>Du får af ${esc(name)}</h3>
+        <div class="sum" id="sget"></div>
+        <div id="lget"></div>
+      </div>
+      <div class="tcol">
+        <h3>${esc(name)} får af dig</h3>
+        <div class="sum" id="sgive"></div>
+        <div id="lgive"></div>
+      </div>
+    </div>
+    <div class="bal">
+      <span class="big" id="balance"></span>
+      <button class="act primary" id="copy" style="margin-left:auto">Kopiér handel som tekst</button>
+    </div>
+    <div class="remind"><b>Efter handlen:</b> ${esc(REMINDER)}</div>`;
+
+  const row = (c, side) => `<div class="titem${sel[side].has(cardKey(c))?"":" off"}" data-k="${esc(cardKey(c))}" data-s="${side}">
+      <input type="checkbox" ${sel[side].has(cardKey(c))?"checked":""}>
+      <span class="tn">${esc(c.name)}<div class="tm">${esc(c.set||"")} ${c.cn?"#"+esc(c.cn):""}${c.foil?" · foil":""}${c.qty>1?` · har ${c.qty}`:""}</div></span>
+      <span class="tp">${c.eur!=null?money(c.eur):"—"}</span>
+      ${side==="give"?`<button class="drop" title="Marker som ikke til handel">✕</button>`:""}
+    </div>`;
+
+  function draw(){
+    $("lget").innerHTML  = p.iGet.length   ? p.iGet.map(c=>row(c,"get")).join("")     : `<p class="hint">Ingen af dine wants hos ${esc(name)}.</p>`;
+    $("lgive").innerHTML = p.theyGet.length? p.theyGet.map(c=>row(c,"give")).join("") : `<p class="hint">${esc(name)} mangler ingen af dine kort.</p>`;
+    const vg = p.iGet.filter(c=>sel.get.has(cardKey(c))).reduce((s,c)=>s+(c.eur||0),0);
+    const vv = p.theyGet.filter(c=>sel.give.has(cardKey(c))).reduce((s,c)=>s+(c.eur||0),0);
+    $("sget").textContent  = `${sel.get.size} valgt · ${money(vg)}`;
+    $("sgive").textContent = `${sel.give.size} valgt · ${money(vv)}`;
+    const d = vg - vv;
+    $("balance").innerHTML = Math.abs(d) < 0.5
+      ? `⚖️ Lige op — ${money(vg)} hver vej`
+      : d > 0 ? `Du får <b style="color:var(--want)">${money(d)}</b> mere end du giver`
+              : `Du giver <b style="color:var(--lock)">${money(-d)}</b> mere end du får`;
+    bind();
+  }
+
+  function bind(){
+    view.querySelectorAll(".titem input").forEach(inp => inp.onchange = () => {
+      const it = inp.closest(".titem"), k = it.dataset.k, s = it.dataset.s;
+      inp.checked ? sel[s].add(k) : sel[s].delete(k);
+      draw();
+    });
+    view.querySelectorAll(".titem .drop").forEach(b => b.onclick = async () => {
+      const k = b.closest(".titem").dataset.k;
+      myBlock.add(k); sel.give.delete(k);
+      p.theyGet = p.theyGet.filter(c => cardKey(c) !== k);
+      await setDoc(doc(db,"users",user.uid), { notForTrade:[...myBlock] }, { merge:true });
+      if (usersById[user.uid]) usersById[user.uid].notForTrade = [...myBlock];
+      toast("Markeret som ikke til handel");
+      draw();
+    });
+  }
+
+  $("back").onclick = () => renderTrade();
+  $("copy").onclick = () => {
+    const fmtList = (list, set) => list.filter(c=>set.has(cardKey(c)))
+      .map(c=>`  - ${c.name}${c.set?` (${c.set}${c.cn?" #"+c.cn:""})`:""}${c.foil?" foil":""}${c.eur!=null?` - ${money(c.eur)}`:""}`).join("\n");
+    const g = p.iGet.filter(c=>sel.get.has(cardKey(c))), v = p.theyGet.filter(c=>sel.give.has(cardKey(c)));
+    const vg = g.reduce((s,c)=>s+(c.eur||0),0), vv = v.reduce((s,c)=>s+(c.eur||0),0), d = vg-vv;
+    const txt = `Bytteforslag: ${user.displayName} <-> ${name}\n\n`
+      + `Jeg får af dig (${g.length} kort, ${money(vg)}):\n${fmtList(p.iGet,sel.get)||"  -"}\n\n`
+      + `Du får af mig (${v.length} kort, ${money(vv)}):\n${fmtList(p.theyGet,sel.give)||"  -"}\n\n`
+      + (Math.abs(d)<0.5 ? `Lige op.\n\n` : `Forskel: ${money(Math.abs(d))} i ${d>0?"min":"din"} favør.\n\n`)
+      + REMINDER;
+    navigator.clipboard.writeText(txt)
+      .then(()=>toast("Handel kopieret — paste den i chatten"))
+      .catch(()=>{ const t=document.createElement("textarea"); t.value=txt; document.body.appendChild(t);
+                   t.select(); document.execCommand("copy"); t.remove(); toast("Handel kopieret"); });
+  };
+
   draw();
 }
 

@@ -58,7 +58,7 @@ Firestore (data), GitHub Actions (scheduler), GitHub Pages (hosting).
 
 | Path | Skrives af | Indhold |
 |---|---|---|
-| `users/{uid}` | klient | `{name, email, photoURL, driveFolderId, pendingImports[], binderMode{}}` |
+| `users/{uid}` | klient | `{name, email, photoURL, driveFolderId, pendingImports[], binderMode{}, notForTrade[]}` |
 | `wants/{uid}` | klient + nat-job | `{cards: [{name, scryfallId, set, cn}], updated}` |
 | `collections/{uid}` | nat-job | `{name, cardCount, uniqueCount, listCount, chunks, binders[], updated}` |
 | `collections/{uid}/chunks/{n}` | nat-job | `{cards: [...]}` — se kortformat nedenfor |
@@ -147,6 +147,34 @@ Firebase web-config er bagt ind i `web/index.html` (projekt: `binder-tutor`).
 - `main.chunk_cards(cards)` — byte-baseret opdeling (700 kB / max 800 kort pr. chunk).
 - Frontend `F`-objektet i `renderFriends()` holder al filterstate på modulniveau, så
   filtre overlever et valutaskift (som gentegner hele viewet).
+
+### Trading Hub
+
+`renderTrade()` + `buildTrade()` i `web/index.html`. Regner **udelukkende i browseren**
+ud fra data der allerede er læsbare — ingen nye Firestore-felter ud over
+`users/{uid}.notForTrade[]`:
+
+- *hvad de har som jeg vil have* ← `matches/{mit uid}` (fra nat-jobbet)
+- *hvad jeg har som de vil have* ← min egen `collections`-chunks ∩ deres `wants`
+
+Derfor slår et nyt hjerte igennem med det samme i den ene retning, uden at vente på
+nat-synket. Koster ca. 18 doc-reads for oversigten; detaljevisningen koster nul ekstra,
+fordi kortlisterne allerede er hentet.
+
+Kun kort i `trade`-tilstand indgår — `deck` og `list` filtreres fra i begge retninger,
+og begge parters `notForTrade` respekteres. Rækkerne sorteres efter *gensidigt* fit
+(`min(iGet, theyGet)`), så tovejs-handler ligger øverst.
+
+**Designvalg — eksklusion, ikke inklusion:** man markerer kun de få kort man alligevel
+ikke vil af med (`notForTrade`), i stedet for at tagge hvad man vil handle. En
+inklusionsliste over 5.000 kort bliver aldrig vedligeholdt; en eksklusionsliste
+forbliver kort. Binder-tilstanden gør grovarbejdet.
+
+Handler afsluttes med **kopiér-som-tekst** til Snapchat/Teams — bevidst ingen
+forslags-collection med accepteret/afvist-status i Firestore. Teksten (og en boks i
+UI'et) slutter altid med `REMINDER`-konstanten: scan nye kort ind i ManaBox og slet
+dem I gav væk. Uden det matcher appen videre på kort folk ikke ejer, og datakvaliteten
+falder fra hinanden for hele gruppen.
 
 ### Patch notes — hvordan man udgiver en ændring
 
@@ -304,6 +332,13 @@ Indsæt i projektets "instructions"-felt:
 > nummereret trin-for-trin-liste over hvad brugeren selv skal gøre — hvilke filer
 > der er ændret, hvilke kommandoer der skal køres (PowerShell), og hvad der skal
 > klikkes hvor i konsollerne. Ingen "husk at deploye" uden at skrive præcis hvordan.**
+>
+> **Enhver ændring brugerne kan mærke, SKAL følges af en ny post i `PATCH_NOTES`
+> øverst i `web/index.html` — i samme commit som ændringen.** Bump `v`, skriv i
+> almindeligt sprog hvad de får ud af det (ikke hvad koden gør), og brug `todo`-feltet
+> hvis de selv skal foretage sig noget. Vennegruppen er spredt over Teams og Snapchat,
+> så appen er eneste sted alle får beskeden. Spørg ikke om lov — gør det som en del af
+> opgaven. Rene refaktoreringer og fejlrettelser ingen kan se, kræver ingen note.
 
 ---
 
