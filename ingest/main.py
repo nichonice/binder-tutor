@@ -23,7 +23,12 @@ import match_wants
 import parse_manabox
 import prices
 
+# Firestore-dokumenter må max fylde 1 MB. Kortene bærer nu også Scryfalls
+# regeltekst, så vi kan ikke bruge et fast antal pr. chunk — vi pakker efter
+# faktisk størrelse med god margin, og med et loft på antal for læsegranularitet.
 CHUNK = 800
+MAX_CHUNK_BYTES = 700_000
+
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/datastore",
@@ -103,6 +108,47 @@ def enrich_wants(db, uid: str, now: str) -> None:
     print(f"[{uid}] berigede {changed} wants med billede")
 
 
+def enrich_card(card: dict, cmap: dict) -> dict:
+    """Læg Scryfall-felterne (pris + gameplay) på et samlingskort, så
+    frontenden kan filtrere på farve, mana value, type og regeltekst uden
+    selv at slå op. Kort uden scryfallId sendes uændret videre."""
+    d = cmap.get(card.get("scryfallId"))
+    if not d:
+        return {**card}
+    eur = (d["eur_foil"] if card.get("foil") else d["eur"]) or d["eur"]
+    out = {**card}
+    out["eur"] = round(eur, 2) if eur else None
+    if d.get("cmc") is not None:
+        out["cmc"] = d["cmc"]
+    if d.get("ci"):
+        out["ci"] = d["ci"]
+    if d.get("colors"):
+        out["colors"] = d["colors"]
+    if d.get("type"):
+        out["type"] = d["type"]
+    if d.get("text"):
+        out["text"] = d["text"]
+    if d.get("mana"):
+        out["mana"] = d["mana"]
+    return out
+
+
+def chunk_cards(cards: list[dict]):
+    """Del kortlisten op i bidder der sikkert holder sig under Firestores
+    1 MB-grænse. Yield'er lister af kort."""
+    buf: list[dict] = []
+    size = 0
+    for c in cards:
+        n = len(json.dumps(c, ensure_ascii=False).encode("utf-8")) + 2
+        if buf and (size + n > MAX_CHUNK_BYTES or len(buf) >= CHUNK):
+            yield buf
+            buf, size = [], 0
+        buf.append(c)
+        size += n
+    if buf:
+        yield buf
+
+
 def main() -> int:
     sa_info = json.loads(os.environ["GCP_SA_KEY"])
     creds = service_account.Credentials.from_service_account_info(
@@ -140,28 +186,42 @@ def main() -> int:
 
     matrix = match_wants.build_matrix(users, collections, wants)
 
+    # Hent kun de Scryfall-kort vi faktisk har brug for. Bulk-filen er ~500 MB,
+    # så filtreringen sparer både hukommelse og tid.
+    need = {
+        c["scryfallId"]
+        for cards in collections.values()
+        for c in cards
+        if c.get("scryfallId")
+    }
     try:
-        pmap = prices.load_price_map()
-        print(f"Priser: {len(pmap)} kort fra Scryfall")
+        cmap = prices.load_card_map(need)
+        print(f"Scryfall: {len(cmap)}/{len(need)} kort beriget (pris + gameplay)")
     except Exception as e:
-        print(f"Kunne ikke hente priser: {e}")
-        pmap = {}
+        print(f"Kunne ikke hente Scryfall-data: {e}")
+        cmap = {}
 
     for u in users:
         uid = u["id"]
         if uid in collections:
-            cards = collections[uid]
+            cards = [enrich_card(c, cmap) for c in collections[uid]]
+            collections[uid] = cards
             ref = db.collection("collections").document(uid)
             for old in ref.collection("chunks").stream():
                 old.reference.delete()
-            for i in range(0, len(cards), CHUNK):
-                ref.collection("chunks").document(str(i // CHUNK)).set(
-                    {"cards": cards[i:i + CHUNK]})
+            n_chunks = 0
+            for i, part in enumerate(chunk_cards(cards)):
+                ref.collection("chunks").document(str(i)).set({"cards": part})
+                n_chunks = i + 1
+            # Distinkte binder-navne, så profilen kan tilbyde handel/låst-valg
+            # uden at skulle læse hele samlingen.
+            binders = sorted({c["binder"] for c in cards if c.get("binder")})
             ref.set({
                 "name": u["name"],
                 "cardCount": sum(c["qty"] for c in cards),
                 "uniqueCount": len(cards),
-                "chunks": (len(cards) + CHUNK - 1) // CHUNK,
+                "chunks": n_chunks,
+                "binders": binders,
                 "updated": now,
             })
 
@@ -169,8 +229,10 @@ def main() -> int:
         for oid, hits in matrix.get(uid, {}).items():
             enriched, total = [], 0.0
             for h in hits:
-                eur = prices.price_of(h, pmap)
-                enriched.append({**h, "eur": round(eur, 2) if eur else None})
+                h = enrich_card(h, cmap)
+                h.pop("text", None)     # regeltekst fylder for meget i matches
+                eur = h.get("eur")
+                enriched.append(h)
                 if eur:
                     total += eur * h.get("qty", 1)
             match_doc[oid] = {"cards": enriched, "totalEur": round(total, 2)}

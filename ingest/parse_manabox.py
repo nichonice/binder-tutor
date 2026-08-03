@@ -4,6 +4,16 @@ import csv
 import io
 
 
+def _first(row: dict, *keys: str) -> str:
+    """Første ikke-tomme kolonne blandt keys. ManaBox har skiftet
+    kolonnenavne før, så vi accepterer flere varianter."""
+    for k in keys:
+        v = row.get(k)
+        if v and v.strip():
+            return v.strip()
+    return ""
+
+
 def parse_csv(raw: bytes) -> list[dict]:
     """ManaBox CSV-eksport -> normaliseret kortliste."""
     text = raw.decode("utf-8-sig")
@@ -20,7 +30,8 @@ def parse_csv(raw: bytes) -> list[dict]:
             "lang": r.get("Language", "en"),
             "rarity": r.get("Rarity", ""),
             "scryfallId": r.get("Scryfall ID", ""),
-            "binder": (r.get("Binder Name") or "").strip(),
+            "binder": _first(r, "Binder Name", "Binder", "binder_name"),
+            "binderType": _first(r, "Binder Type", "binder_type"),
         })
     return cards
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Binder Tutor</title>
 <style>
-:root { --bg:#14161f; --card:#1e2130; --card2:#252a3d; --text:#e8e9ee; --muted:#8b8fa3; --accent:#c9a84c; --want:#4ccc6f; --line:#2a2e42; }
+:root { --bg:#14161f; --card:#1e2130; --card2:#252a3d; --text:#e8e9ee; --muted:#8b8fa3; --accent:#c9a84c; --want:#4ccc6f; --lock:#e0774a; --line:#2a2e42; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; }
 header { position:sticky; top:0; z-index:20; background:rgba(20,22,31,.97); border-bottom:1px solid var(--line); padding:12px 20px; }
@@ -15,28 +15,34 @@ nav { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
 nav button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:.88rem; cursor:pointer; }
 nav button.on { border-color:var(--accent); color:var(--accent); }
 input,select { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:9px 12px; font-size:.9rem; }
+input:focus,select:focus { outline:none; border-color:var(--accent); }
 button.act { background:var(--card); color:var(--text); border:1px solid #343850; border-radius:8px; padding:9px 14px; cursor:pointer; font-size:.9rem; }
 button.act:hover { border-color:var(--accent); }
 button.primary { background:var(--accent); color:#1a1a1a; border:none; font-weight:600; }
 .me { margin-left:auto; display:flex; align-items:center; gap:8px; font-size:.85rem; color:var(--muted); }
 .me img { width:28px; height:28px; border-radius:50%; }
+#cur { font-weight:700; min-width:52px; }
 #view { padding:20px; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; }
 .card { background:var(--card); border-radius:12px; overflow:hidden; border:1px solid var(--line); position:relative; }
 .card img { width:100%; aspect-ratio:488/680; display:block; background:#0d0e14; }
 .card.want { border-color:var(--want); }
+.card.locked { opacity:.72; }
 .info { padding:8px 10px; } .name { font-size:.85rem; font-weight:600; line-height:1.2; }
 .meta { font-size:.72rem; color:var(--muted); margin-top:3px; }
-.badges { position:absolute; top:8px; left:8px; display:flex; gap:5px; }
+.price { font-size:.8rem; font-weight:700; color:var(--accent); margin-top:4px; }
+.badges { position:absolute; top:8px; left:8px; display:flex; gap:5px; flex-wrap:wrap; max-width:70%; }
 .badge { font-size:.67rem; font-weight:700; padding:3px 7px; border-radius:20px; }
 .qty { background:rgba(0,0,0,.75); color:#fff; } .foil { background:linear-gradient(90deg,#c9a84c,#e8d48b); color:#1a1a1a; }
 .wantb { background:var(--want); color:#0c2214; }
+.lockb { background:var(--lock); color:#241008; }
 .heart { position:absolute; top:6px; right:6px; width:34px; height:34px; border-radius:50%; border:none; cursor:pointer;
   background:rgba(0,0,0,.6); color:#fff; font-size:1.05rem; display:flex; align-items:center; justify-content:center; }
 .heart.on { background:var(--want); color:#0c2214; }
 .matchbox { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
 .matchbox h2 { font-size:1rem; color:var(--want); margin-bottom:8px; }
 .pair { font-size:.9rem; margin:5px 0; }
+.pair.locked { color:var(--muted); }
 .center { max-width:440px; margin:60px auto; text-align:center; }
 .center p { color:var(--muted); margin:12px 0 20px; line-height:1.6; }
 label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
@@ -45,6 +51,28 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--card2); border:1px solid var(--accent);
   padding:10px 18px; border-radius:10px; font-size:.9rem; opacity:0; transition:opacity .2s; z-index:50; }
 #toast.show { opacity:1; }
+/* --- filterpanel --- */
+.panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; display:none; }
+.panel.open { display:block; }
+.fgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px 14px; }
+.fgrid label { margin:0 0 4px; }
+.fgrid input,.fgrid select { width:100%; }
+.pair2 { display:flex; gap:6px; } .pair2 input { width:100%; }
+.chips { display:flex; gap:5px; flex-wrap:wrap; }
+.chip { border:1px solid #343850; background:var(--card2); color:var(--muted); border-radius:8px; padding:6px 10px;
+  font-size:.8rem; font-weight:700; cursor:pointer; }
+.chip.on { border-color:var(--accent); color:var(--accent); background:#2e2a1c; }
+.chip.W.on{color:#f5eeda;border-color:#f5eeda;background:#33312a} .chip.U.on{color:#7fb6e8;border-color:#7fb6e8;background:#1d2a38}
+.chip.B.on{color:#b4a7c4;border-color:#b4a7c4;background:#272232} .chip.R.on{color:#e8836f;border-color:#e8836f;background:#382220}
+.chip.G.on{color:#7fc98f;border-color:#7fc98f;background:#1f3126} .chip.C.on{color:#c8ccda;border-color:#c8ccda;background:#2b2f3d}
+.fbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.count { font-size:.85rem; color:var(--muted); }
+.binderrow { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:.9rem; }
+.binderrow .nm { flex:1; }
+.seg { display:flex; border:1px solid #343850; border-radius:8px; overflow:hidden; }
+.seg button { background:var(--card2); color:var(--muted); border:none; padding:6px 12px; font-size:.78rem; cursor:pointer; }
+.seg button.on { background:var(--accent); color:#1a1a1a; font-weight:700; }
+.seg button.on.lock { background:var(--lock); color:#241008; }
 </style>
 </head>
 <body>
@@ -87,18 +115,61 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 const view = $("view");
 let user = null, myWants = [];   // myWants: [{name, scryfallId, set, cn}]
+let usersById = {};              // uid -> profildata (bl.a. lockedBinders)
+let currentView = "friends";
 
 const scryImg = c => c ? `https://cards.scryfall.io/normal/front/${c[0]}/${c[1]}/${c}.jpg` : "";
 const toast = m => { const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------- Valuta: EUR fra Scryfall, kurs fra ECB via frankfurter.dev ----------
+const FX = { code: localStorage.getItem("bt.cur") || "EUR", rate: 7.46, day: null };
+
+async function loadRate(){
+  const today = new Date().toISOString().slice(0,10);
+  try {
+    const c = JSON.parse(localStorage.getItem("bt.fx") || "null");
+    if (c && c.day === today) { FX.rate = c.rate; FX.day = c.day; return; }
+  } catch {}
+  try {
+    const r = await (await fetch("https://api.frankfurter.dev/v1/latest?from=EUR&to=DKK")).json();
+    if (r?.rates?.DKK) {
+      FX.rate = r.rates.DKK; FX.day = r.date || today;
+      localStorage.setItem("bt.fx", JSON.stringify({ day: today, rate: FX.rate }));
+    }
+  } catch { /* behold fallback-kursen */ }
+}
+
+const nf = (v,d) => v.toLocaleString("da-DK",{minimumFractionDigits:d,maximumFractionDigits:d});
+const money = eur => {
+  if (eur == null) return "";
+  if (FX.code === "EUR") return `${nf(eur,2)} €`;
+  const v = eur * FX.rate;
+  return `${nf(v, v < 10 ? 1 : 0)} kr`;
+};
+// Brugerindtastede prisgrænser er i den viste valuta — regn dem om til EUR.
+const toEur = v => FX.code === "EUR" ? v : v / FX.rate;
+
+function renderCur(){
+  $("cur").textContent = FX.code === "EUR" ? "€ EUR" : "kr DKK";
+  $("cur").title = `1 € = ${FX.rate.toFixed(4)} kr (ECB${FX.day ? ", " + FX.day : ""}) — klik for at skifte`;
+}
 
 // ---------- Auth ----------
 onAuthStateChanged(auth, async u => {
   user = u;
   if (!u) return renderLogin();
-  $("me").innerHTML = `<img src="${u.photoURL}"><span>${u.displayName}</span>
+  $("me").innerHTML = `<button class="act" id="cur" style="padding:5px 10px"></button>
+    <img src="${esc(u.photoURL)}"><span>${esc(u.displayName)}</span>
     <button class="act" id="out" style="padding:5px 10px">Log ud</button>`;
   $("out").onclick = () => signOut(auth);
+  $("cur").onclick = () => {
+    FX.code = FX.code === "EUR" ? "DKK" : "EUR";
+    localStorage.setItem("bt.cur", FX.code);
+    renderCur(); show(currentView);
+  };
   $("nav").style.display = "flex";
+  await loadRate(); renderCur();
   // selv-registrering: opret/opdatér users/{uid}
   const uref = doc(db, "users", u.uid);
   const snap = await getDoc(uref);
@@ -127,6 +198,7 @@ $("nav").querySelectorAll("button").forEach(b =>
     b.classList.add("on"); show(b.dataset.v); });
 
 function show(v) {
+  currentView = v;
   if (v==="friends") return renderFriends();
   if (v==="wants") return renderWants();
   if (v==="matches") return renderMatches();
@@ -134,50 +206,295 @@ function show(v) {
 }
 
 const wantNames = () => new Set(myWants.map(w => w.name.toLowerCase()));
+const front = n => String(n||"").toLowerCase().split(" // ")[0].trim();
 
 async function saveWants() {
   await setDoc(doc(db,"wants",user.uid), { cards: myWants, updated: new Date().toISOString() });
 }
 
+async function loadUsers(){
+  const snap = await getDocs(collection(db,"users"));
+  usersById = snap.docs.reduce((a,d)=>(a[d.id]={id:d.id,...d.data()},a),{});
+  return usersById;
+}
+
+// Bindere ejeren har markeret som låst til decks (sættes i Min profil).
+const lockedOf = uid => new Set((usersById[uid]?.lockedBinders) || []);
+const isLocked = (c, locked) => !!(c.binder && locked.has(c.binder));
+
+// ---------- Scryfall-søgning (avanceret syntaks) ----------
+async function scryfallNames(q){
+  let url = `https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&unique=cards&order=name`;
+  const names = new Set(); let pages = 0, more = false;
+  while (url && pages < 5) {
+    const r = await (await fetch(url)).json();
+    if (r.object === "error") throw new Error(r.details || "ugyldig søgning");
+    (r.data || []).forEach(c => { names.add(c.name.toLowerCase()); names.add(front(c.name)); });
+    more = !!r.has_more; url = r.has_more ? r.next_page : null; pages++;
+  }
+  return { names, truncated: more };
+}
+
 // ---------- Venner (samlinger) ----------
+const F = { q:"", text:"", type:"", colors:new Set(), cmode:"any", cmcMin:"", cmcMax:"",
+            set:"", rar:new Set(), foil:"", cond:"", binder:"", lock:"", want:"",
+            pmin:"", pmax:"", sort:"name", sq:"", sqNames:null };
+
 async function renderFriends() {
-  view.innerHTML = `<div class="row" style="margin-bottom:14px">
-    <select id="who"></select><input id="q" placeholder="Søg kort..." style="flex:1;min-width:160px">
-    </div><div id="status" style="color:var(--muted);font-size:.85rem;margin-bottom:12px"></div>
+  view.innerHTML = `
+    <div class="row" style="margin-bottom:12px">
+      <select id="who" style="min-width:200px"></select>
+      <input id="q" placeholder="Søg kortnavn..." style="flex:1;min-width:160px">
+      <button class="act" id="ftog">Filtre ▾</button>
+    </div>
+    <div class="panel" id="panel">
+      <div class="fgrid">
+        <div><label>Farveidentitet</label>
+          <div class="chips" id="colors">${["W","U","B","R","G","C"].map(c=>`<span class="chip ${c}" data-c="${c}">${c}</span>`).join("")}</div>
+          <select id="cmode" style="margin-top:6px">
+            <option value="any">mindst én af de valgte</option>
+            <option value="all">alle valgte (må have flere)</option>
+            <option value="exact">præcis de valgte</option>
+            <option value="within">indeholdt i de valgte</option>
+          </select>
+        </div>
+        <div><label>Mana value (CMC)</label>
+          <div class="pair2"><input id="cmcMin" type="number" min="0" placeholder="fra"><input id="cmcMax" type="number" min="0" placeholder="til"></div>
+        </div>
+        <div><label>Korttype</label><input id="type" placeholder="fx creature, instant, saga"></div>
+        <div><label>Regeltekst indeholder</label><input id="text" placeholder="fx draw a card"></div>
+        <div><label>Sæt</label><select id="set"></select></div>
+        <div><label>Sjældenhed</label>
+          <div class="chips" id="rar">${[["common","C"],["uncommon","U"],["rare","R"],["mythic","M"]].map(([v,l])=>`<span class="chip" data-r="${v}">${l}</span>`).join("")}</div>
+        </div>
+        <div><label>Binder / deck</label><select id="binder"></select></div>
+        <div><label>Handelsstatus</label>
+          <select id="lock"><option value="">Alle</option><option value="trade">Kun til handel</option><option value="locked">Kun låst til decks</option></select>
+        </div>
+        <div><label>Foil</label><select id="foil"><option value="">Alle</option><option value="1">Kun foil</option><option value="0">Kun non-foil</option></select></div>
+        <div><label>Stand</label><select id="cond"></select></div>
+        <div><label>Pris (<span class="curlbl">${FX.code==="EUR"?"€":"kr"}</span>)</label>
+          <div class="pair2"><input id="pmin" type="number" min="0" placeholder="fra"><input id="pmax" type="number" min="0" placeholder="til"></div>
+        </div>
+        <div><label>Mine wants</label>
+          <select id="want"><option value="">Alle kort</option><option value="1">Kun mine wants</option><option value="0">Skjul mine wants</option></select>
+        </div>
+        <div style="grid-column:1/-1"><label>Scryfall-søgesyntaks (valgfri — søger direkte hos Scryfall)</label>
+          <div class="pair2"><input id="sq" placeholder='fx  t:creature c:ur cmc<=3 o:"draw a card"'>
+          <button class="act" id="sqgo" style="white-space:nowrap">Søg</button>
+          <button class="act" id="sqclr" style="white-space:nowrap">Ryd</button></div>
+          <p class="hint" id="sqhint">Bruger Scryfalls egen søgemaskine og skærer resultatet mod samlingen. Max 875 kort pr. søgning.</p>
+        </div>
+      </div>
+      <div class="fbar">
+        <label style="margin:0">Sortér</label>
+        <select id="sort">
+          <option value="name">Navn A-Å</option>
+          <option value="price-desc">Pris, højeste først</option>
+          <option value="price-asc">Pris, laveste først</option>
+          <option value="cmc-asc">Mana value, lav→høj</option>
+          <option value="cmc-desc">Mana value, høj→lav</option>
+          <option value="qty-desc">Antal, flest først</option>
+          <option value="set">Sæt</option>
+        </select>
+        <button class="act" id="clr">Nulstil filtre</button>
+        <span class="count" id="count"></span>
+      </div>
+    </div>
+    <div id="status" style="color:var(--muted);font-size:.85rem;margin-bottom:12px"></div>
     <div class="grid" id="grid"></div>
     <button class="act" id="more" style="display:none;margin:16px auto">Vis flere</button>`;
-  const users = (await getDocs(collection(db,"users"))).docs.map(d=>({id:d.id,...d.data()}));
+
+  await loadUsers();
   const cols = {};
-  for (const u of users) {
+  for (const u of Object.values(usersById)) {
     const c = await getDoc(doc(db,"collections",u.id));
     if (c.exists()) cols[u.id] = { ...u, ...c.data() };
   }
   const ids = Object.keys(cols);
-  $("who").innerHTML = ids.map(id=>`<option value="${id}">${cols[id].name} (${cols[id].uniqueCount||0} kort)</option>`).join("")
+  $("who").innerHTML = ids.map(id=>`<option value="${esc(id)}">${esc(cols[id].name)} (${cols[id].uniqueCount||0} kort)</option>`).join("")
     || `<option>Ingen samlinger endnu</option>`;
-  let cards=[], filtered=[], shown=0;
+
+  let cards = [], filtered = [], shown = 0, ownerId = null, locked = new Set(), baseStatus = "";
+
   async function load(id){
     if(!cols[id]) return;
-    $("status").textContent="Henter...";
+    ownerId = id; locked = lockedOf(id);
+    $("status").textContent = "Henter...";
     const cs = await Promise.all(Array.from({length:cols[id].chunks||0},(_,i)=>getDoc(doc(db,"collections",id,"chunks",String(i)))));
     cards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
-    $("status").textContent = `${cols[id].name}: ${cards.length} unikke · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`;
+    fillOptions(cols[id]);
+    syncPanel();
+    const nLock = cards.filter(c=>isLocked(c,locked)).length;
+    baseStatus = `${cols[id].name}: ${cards.length} unikke · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`
+      + (nLock ? ` · ${nLock} låst til decks` : "");
     draw();
   }
-  function draw(){ const q=$("q").value.toLowerCase();
-    filtered=cards.filter(c=>!q||c.name.toLowerCase().includes(q)); $("grid").innerHTML=""; shown=0; more(); }
-  function more(){ const wn=wantNames();
-    $("grid").insertAdjacentHTML("beforeend", filtered.slice(shown,shown+100).map(c=>cardHtml(c,wn.has(c.name.toLowerCase()))).join(""));
-    shown+=Math.min(100,filtered.length-shown); $("more").style.display=shown<filtered.length?"block":"none"; }
-  $("who").onchange=e=>load(e.target.value); $("q").oninput=draw; $("more").onclick=more;
-  if(ids.length) load(ids[0]); else $("status").textContent="Ingen samlinger synket endnu.";
+
+  function fillOptions(meta){
+    const uniq = k => [...new Set(cards.map(c=>c[k]).filter(Boolean))].sort();
+    $("set").innerHTML = `<option value="">Alle sæt</option>` +
+      uniq("set").map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    $("cond").innerHTML = `<option value="">Alle</option>` +
+      uniq("condition").map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    const binders = (meta.binders && meta.binders.length) ? meta.binders : uniq("binder");
+    $("binder").innerHTML = `<option value="">Alle bindere</option>` +
+      binders.map(b=>`<option value="${esc(b)}">${esc(b)}${locked.has(b)?" (låst)":""}</option>`).join("") +
+      (binders.length ? "" : `<option disabled>ingen binder-data i eksporten</option>`);
+    $("set").value = F.set; $("cond").value = F.cond; $("binder").value = F.binder;
+  }
+
+  // Filtrene lever i F på modulniveau, så de overlever fx et valutaskift
+  // (som gentegner hele viewet). Skriv dem tilbage i kontrollerne.
+  function syncPanel(){
+    ["q","text","type","cmcMin","cmcMax","pmin","pmax","sq"].forEach(k=>{ if($(k)) $(k).value = F[k] || ""; });
+    ["foil","lock","want","sort","cmode"].forEach(k=>{ if($(k)) $(k).value = F[k]; });
+    $("colors").querySelectorAll(".chip").forEach(c=>c.classList.toggle("on", F.colors.has(c.dataset.c)));
+    $("rar").querySelectorAll(".chip").forEach(c=>c.classList.toggle("on", F.rar.has(c.dataset.r)));
+    const active = F.q||F.text||F.type||F.set||F.cond||F.binder||F.foil||F.lock||F.want
+      ||F.cmcMin!==""||F.cmcMax!==""||F.pmin!==""||F.pmax!==""||F.colors.size||F.rar.size||F.sqNames;
+    if (active) $("panel").classList.add("open");
+  }
+
+  function pass(c){
+    const wn = wantNames();
+    if (F.q && !c.name.toLowerCase().includes(F.q)) return false;
+    if (F.text && !String(c.text||"").toLowerCase().includes(F.text)) return false;
+    if (F.type && !String(c.type||"").toLowerCase().includes(F.type)) return false;
+    if (F.set && c.set !== F.set) return false;
+    if (F.cond && c.condition !== F.cond) return false;
+    if (F.binder && c.binder !== F.binder) return false;
+    if (F.foil === "1" && !c.foil) return false;
+    if (F.foil === "0" && c.foil) return false;
+    if (F.rar.size && !F.rar.has(String(c.rarity||"").toLowerCase())) return false;
+    if (F.cmcMin !== "" && !(Number(c.cmc ?? -1) >= Number(F.cmcMin))) return false;
+    if (F.cmcMax !== "" && !(Number(c.cmc ?? 1e9) <= Number(F.cmcMax))) return false;
+    if (F.pmin !== "" && !(c.eur != null && c.eur >= toEur(Number(F.pmin)))) return false;
+    if (F.pmax !== "" && !(c.eur != null && c.eur <= toEur(Number(F.pmax)))) return false;
+    const lock = isLocked(c, locked);
+    if (F.lock === "trade" && lock) return false;
+    if (F.lock === "locked" && !lock) return false;
+    const isW = wn.has(c.name.toLowerCase()) || wn.has(front(c.name));
+    if (F.want === "1" && !isW) return false;
+    if (F.want === "0" && isW) return false;
+    if (F.colors.size) {
+      // ci er Scryfalls color_identity. Farveløse kort har tom/manglende ci og
+      // matcher chippen "C" — men de er også "indeholdt i" enhver farveidentitet,
+      // hvilket er hele pointen når man leder efter kort til et bestemt deck.
+      const raw = new Set(c.ci || []);
+      const colorless = raw.size === 0;
+      const wantsC = F.colors.has("C");
+      const sel = new Set([...F.colors].filter(x => x !== "C"));
+      let ok;
+      switch (F.cmode) {
+        case "all":    ok = sel.size ? [...sel].every(x=>raw.has(x)) : (wantsC && colorless); break;
+        case "exact":  ok = sel.size ? (raw.size === sel.size && [...sel].every(x=>raw.has(x)))
+                                     : (wantsC && colorless); break;
+        case "within": ok = colorless || [...raw].every(x=>sel.has(x)); break;
+        default:       ok = (wantsC && colorless) || [...sel].some(x=>raw.has(x));
+      }
+      if (!ok) return false;
+    }
+    if (F.sqNames && !(F.sqNames.has(c.name.toLowerCase()) || F.sqNames.has(front(c.name)))) return false;
+    return true;
+  }
+
+  function sortCards(a,b){
+    switch (F.sort) {
+      case "price-desc": return (b.eur ?? -1) - (a.eur ?? -1);
+      case "price-asc":  return (a.eur ?? 1e9) - (b.eur ?? 1e9);
+      case "cmc-asc":    return (a.cmc ?? 1e9) - (b.cmc ?? 1e9) || a.name.localeCompare(b.name,"da");
+      case "cmc-desc":   return (b.cmc ?? -1) - (a.cmc ?? -1) || a.name.localeCompare(b.name,"da");
+      case "qty-desc":   return (b.qty||0) - (a.qty||0);
+      case "set":        return String(a.set).localeCompare(String(b.set)) || a.name.localeCompare(b.name,"da");
+      default:           return a.name.localeCompare(b.name,"da");
+    }
+  }
+
+  function draw(){
+    filtered = cards.filter(pass).sort(sortCards);
+    const val = filtered.reduce((s,c)=>s + (c.eur||0) * (c.qty||1), 0);
+    const summary = `${filtered.length} af ${cards.length} kort${val ? " · " + money(val) : ""}`;
+    $("count").textContent = summary;
+    $("status").textContent = baseStatus + (filtered.length !== cards.length ? ` · viser ${summary}` : "");
+    $("grid").innerHTML = ""; shown = 0; more();
+  }
+
+  function more(){
+    const wn = wantNames();
+    const slice = filtered.slice(shown, shown+100);
+    $("grid").insertAdjacentHTML("beforeend", slice.map((c,i)=>
+      cardHtml(c, wn.has(c.name.toLowerCase()) || wn.has(front(c.name)), isLocked(c,locked), shown+i)).join(""));
+    shown += slice.length;
+    $("more").style.display = shown < filtered.length ? "block" : "none";
+    bindHearts();
+  }
+
+  function bindHearts(){
+    $("grid").querySelectorAll(".heart").forEach(h => h.onclick = async () => {
+      const c = filtered[Number(h.dataset.i)];
+      await toggleWant({ name:c.name, id:c.scryfallId, set:c.set, cn:c.cn });
+      draw();
+    });
+  }
+
+  // --- events ---
+  $("who").onchange = e => load(e.target.value);
+  $("ftog").onclick = () => $("panel").classList.toggle("open");
+  const deb = (fn,ms=250) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
+  $("q").oninput    = deb(e => { F.q = e.target.value.toLowerCase().trim(); draw(); });
+  $("text").oninput = deb(e => { F.text = e.target.value.toLowerCase().trim(); draw(); });
+  $("type").oninput = deb(e => { F.type = e.target.value.toLowerCase().trim(); draw(); });
+  ["set","cond","binder","foil","lock","want","sort"].forEach(k =>
+    $(k).onchange = e => { F[k === "cond" ? "cond" : k] = e.target.value; draw(); });
+  ["cmcMin","cmcMax","pmin","pmax"].forEach(k =>
+    $(k).oninput = deb(e => { F[k] = e.target.value; draw(); }));
+  $("cmode").onchange = e => { F.cmode = e.target.value; draw(); };
+  $("colors").querySelectorAll(".chip").forEach(ch => ch.onclick = () => {
+    const c = ch.dataset.c; F.colors.has(c) ? F.colors.delete(c) : F.colors.add(c);
+    ch.classList.toggle("on"); draw();
+  });
+  $("rar").querySelectorAll(".chip").forEach(ch => ch.onclick = () => {
+    const r = ch.dataset.r; F.rar.has(r) ? F.rar.delete(r) : F.rar.add(r);
+    ch.classList.toggle("on"); draw();
+  });
+  $("sqgo").onclick = async () => {
+    const q = $("sq").value.trim();
+    if (!q) { F.sqNames = null; $("sqhint").textContent = "Ryddet."; return draw(); }
+    $("sqhint").textContent = "Søger hos Scryfall...";
+    try {
+      const { names, truncated } = await scryfallNames(q);
+      F.sqNames = names;
+      $("sqhint").textContent = `Scryfall gav ${names.size} navne${truncated ? " (afkortet ved 875 — snævr søgningen ind)" : ""}.`;
+      draw();
+    } catch (e) { F.sqNames = null; $("sqhint").textContent = `Scryfall: ${e.message}`; draw(); }
+  };
+  $("sq").onkeydown = e => { if (e.key === "Enter") $("sqgo").click(); };
+  $("sqclr").onclick = () => { $("sq").value = ""; F.sqNames = null; $("sqhint").textContent = "Ryddet."; draw(); };
+  $("more").onclick = more;
+  $("clr").onclick = () => {
+    Object.assign(F, { q:"", text:"", type:"", cmcMin:"", cmcMax:"", set:"", foil:"", cond:"",
+                       binder:"", lock:"", want:"", pmin:"", pmax:"", sort:"name", sq:"", sqNames:null });
+    F.colors.clear(); F.rar.clear();
+    ["q","text","type","cmcMin","cmcMax","pmin","pmax","sq"].forEach(k=>{ if($(k)) $(k).value=""; });
+    ["set","cond","binder","foil","lock","want"].forEach(k=>{ if($(k)) $(k).value=""; });
+    $("sort").value = "name"; $("cmode").value = "any";
+    $("panel").querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));
+    draw();
+  };
+
+  if (ids.length) load(ids[0]); else $("status").textContent = "Ingen samlinger synket endnu.";
 }
 
-function cardHtml(c, isWant){
-  return `<div class="card${isWant?' want':''}">
-    <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}</div>
+function cardHtml(c, isWant, locked, idx){
+  const p = c.eur != null ? `<div class="price">${money(c.eur)}${c.qty>1?` <span style="color:var(--muted);font-weight:400">· i alt ${money(c.eur*c.qty)}</span>`:""}</div>` : "";
+  return `<div class="card${isWant?' want':''}${locked?' locked':''}">
+    <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}${locked?`<span class="badge lockb">I DECK</span>`:""}</div>
+    ${idx!=null?`<button class="heart${isWant?' on':''}" data-i="${idx}" title="${isWant?'Fjern fra wants':'Tilføj til mine wants'}">${isWant?'♥':'♡'}</button>`:""}
     <img loading="lazy" src="${scryImg(c.scryfallId)}" onerror="this.style.opacity=.15">
-    <div class="info"><div class="name">${c.name}</div><div class="meta">${c.set||""} ${c.cn?"#"+c.cn:""} · ${c.condition||""}</div></div></div>`;
+    <div class="info"><div class="name">${esc(c.name)}</div>
+      <div class="meta">${esc(c.set||"")} ${c.cn?"#"+esc(c.cn):""}${c.condition?" · "+esc(c.condition):""}${c.binder?" · "+esc(c.binder):""}</div>
+      ${p}</div></div>`;
 }
 
 // ---------- Mine Wants ----------
@@ -202,35 +519,41 @@ async function doSearch(q){
     const names=(ac.data||[]).slice(0,8);
     const cards=await Promise.all(names.map(n=>fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(n)}`).then(x=>x.json())));
     const wn=wantNames();
-    r.innerHTML=cards.map(c=>{
+    r.innerHTML=cards.map((c,i)=>{
       const on=wn.has(c.name.toLowerCase());
-      const id=c.id;
+      const eur = c.prices?.eur ? Number(c.prices.eur) : null;
       return `<div class="card${on?' want':''}">
-        <button class="heart${on?' on':''}" data-name="${c.name.replace(/"/g,'&quot;')}" data-id="${id}" data-set="${(c.set||'').toUpperCase()}" data-cn="${c.collector_number||''}">${on?'♥':'♡'}</button>
-        <img loading="lazy" src="${scryImg(id)}" onerror="this.style.opacity=.15">
-        <div class="info"><div class="name">${c.name}</div><div class="meta">${(c.set||'').toUpperCase()} #${c.collector_number||''}</div></div></div>`;
+        <button class="heart${on?' on':''}" data-i="${i}">${on?'♥':'♡'}</button>
+        <img loading="lazy" src="${scryImg(c.id)}" onerror="this.style.opacity=.15">
+        <div class="info"><div class="name">${esc(c.name)}</div>
+          <div class="meta">${esc((c.set||'').toUpperCase())} #${esc(c.collector_number||'')}</div>
+          ${eur!=null?`<div class="price">${money(eur)}</div>`:""}</div></div>`;
     }).join("");
-    r.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant(h.dataset));
-  }catch(e){ r.innerHTML=`<p class="hint">Kunne ikke søge: ${e.message}</p>`; }
+    r.querySelectorAll(".heart").forEach(h=>h.onclick=()=>{
+      const c=cards[Number(h.dataset.i)];
+      toggleWant({name:c.name, id:c.id, set:(c.set||'').toUpperCase(), cn:c.collector_number||''});
+    });
+  }catch(e){ r.innerHTML=`<p class="hint">Kunne ikke søge: ${esc(e.message)}</p>`; }
 }
 
 async function toggleWant(d){
-  const i=myWants.findIndex(w=>w.name.toLowerCase()===d.name.toLowerCase());
-  if(i>=0){ myWants.splice(i,1); toast("Fjernet fra wants"); }
-  else { myWants.push({name:d.name, scryfallId:d.id, set:d.set, cn:d.cn}); toast("Tilføjet til wants"); }
+  const i=myWants.findIndex(w=>w.name.toLowerCase()===String(d.name).toLowerCase());
+  if(i>=0){ myWants.splice(i,1); toast(`${d.name} fjernet fra wants`); }
+  else { myWants.push({name:d.name, scryfallId:d.id||"", set:d.set||"", cn:d.cn||""}); toast(`${d.name} tilføjet til wants`); }
   await saveWants();
   if($("wc"))$("wc").textContent=myWants.length;
-  drawMine(); doSearch($("search").value);
+  if($("mine")) drawMine();
+  if($("search")) doSearch($("search").value);
 }
 
 function drawMine(){
   const m=$("mine"); if(!m)return;
-  m.innerHTML = myWants.length? myWants.map(w=>`<div class="card want">
-    <button class="heart on" data-name="${w.name.replace(/"/g,'&quot;')}">♥</button>
+  m.innerHTML = myWants.length? myWants.map((w,i)=>`<div class="card want">
+    <button class="heart on" data-i="${i}">♥</button>
     <img loading="lazy" src="${scryImg(w.scryfallId)}" onerror="this.style.opacity=.15">
-    <div class="info"><div class="name">${w.name}</div><div class="meta">${w.set||''} ${w.cn?'#'+w.cn:''}</div></div></div>`).join("")
-    : `<p class="hint">Ingen wants endnu. Søg et kort ovenfor og tryk på hjertet.</p>`;
-  m.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant({name:h.dataset.name}));
+    <div class="info"><div class="name">${esc(w.name)}</div><div class="meta">${esc(w.set||'')} ${w.cn?'#'+esc(w.cn):''}</div></div></div>`).join("")
+    : `<p class="hint">Ingen wants endnu. Søg et kort ovenfor og tryk på hjertet — eller sæt hjerte direkte på et kort i en vens samling.</p>`;
+  m.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant({name:myWants[Number(h.dataset.i)].name}));
 }
 
 async function importDeck(){
@@ -247,30 +570,78 @@ async function importDeck(){
 
 // ---------- Matches ----------
 async function renderMatches(){
-  view.innerHTML=`<div id="mstat" style="color:var(--muted);margin-bottom:12px">Henter...</div><div id="mb"></div>`;
+  view.innerHTML=`<div class="row" style="margin-bottom:12px">
+      <label style="margin:0"><input type="checkbox" id="showlock" style="vertical-align:-2px"> Vis også kort der er låst til decks</label>
+    </div>
+    <div id="mstat" style="color:var(--muted);margin-bottom:12px">Henter...</div><div id="mb"></div>`;
   const m=await getDoc(doc(db,"matches",user.uid));
-  const users=(await getDocs(collection(db,"users"))).docs.reduce((a,d)=>(a[d.id]=d.data().name,a),{});
+  await loadUsers();
   const data=m.exists()?m.data():{};
-  const entries=Object.entries(data).sort((a,b)=>(b[1].totalEur||0)-(a[1].totalEur||0));
-  $("mstat").textContent = entries.length? "" : "Ingen matches endnu — tilføj wants og vent på næste nat-sync.";
-  $("mb").innerHTML = entries.map(([oid,mm])=>`<div class="matchbox">
-    <h2>💰 ${users[oid]||oid} har ${mm.cards.length} af dine wants — værdi ~${(mm.totalEur||0).toFixed(2)} €</h2>
-    ${mm.cards.map(h=>`<div class="pair">• ${h.name} — ${h.set||''} #${h.cn||''}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${h.eur.toFixed(2)} €</b>`:''} <span style="color:var(--muted)">(${h.binder||''})</span></div>`).join("")}
-  </div>`).join("");
+
+  function draw(){
+    const showLocked = $("showlock").checked;
+    const rows = Object.entries(data).map(([oid,mm])=>{
+      const locked = lockedOf(oid);
+      const cards = (mm.cards||[]).map(h=>({...h, _lock:isLocked(h,locked)}))
+                                  .filter(h=>showLocked || !h._lock);
+      const total = cards.reduce((s,h)=>s+(h.eur||0)*(h.qty||1),0);
+      return [oid, cards, total];
+    }).filter(([,cards])=>cards.length).sort((a,b)=>b[2]-a[2]);
+
+    $("mstat").textContent = rows.length ? "" :
+      (Object.keys(data).length ? "Ingen matches til handel — prøv at vise låste kort også."
+                                : "Ingen matches endnu — tilføj wants og vent på næste nat-sync.");
+    $("mb").innerHTML = rows.map(([oid,cards,total])=>`<div class="matchbox">
+      <h2>💰 ${esc(usersById[oid]?.name || oid)} har ${cards.length} af dine wants — værdi ~${money(total)}</h2>
+      ${cards.map(h=>`<div class="pair${h._lock?' locked':''}">• ${esc(h.name)} — ${esc(h.set||'')} #${esc(h.cn||'')}${h.foil?' ✦foil':''} x${h.qty||1}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''} <span style="color:var(--muted)">(${esc(h.binder||'ingen binder')})</span>${h._lock?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
+    </div>`).join("");
+  }
+  $("showlock").onchange = draw;
+  draw();
 }
 
 // ---------- Profil ----------
 async function renderProfile(){
   const snap=await getDoc(doc(db,"users",user.uid));
   const d=snap.exists()?snap.data():{};
+  const col=await getDoc(doc(db,"collections",user.uid));
+  const binders=(col.exists()? (col.data().binders||[]) : []);
+  let lockedSet=new Set(d.lockedBinders||[]);
+
   view.innerHTML=`<div class="field">
-    <label>Visningsnavn</label><input id="pname" value="${d.name||user.displayName}" style="width:100%">
-    <label>Google Drive mappe-ID (hvor dine ManaBox-backups ligger)</label>
-    <input id="pdrive" value="${d.driveFolderId||''}" placeholder="fx 1UT8G9VJIMg4..." style="width:100%">
+    <label>Visningsnavn</label><input id="pname" value="${esc(d.name||user.displayName)}" style="width:100%">
+    <label>Google Drive mappe-ID (hvor dine ManaBox-eksporter ligger)</label>
+    <input id="pdrive" value="${esc(d.driveFolderId||'')}" placeholder="fx 1UT8G9VJIMg4..." style="width:100%">
     <p class="hint">Del mappen med nat-jobbets service-konto (se SETUP-guiden), og indsæt mappe-ID'et
-    fra Drive-URL'en her. Nat-synket henter din nyeste backup automatisk.</p>
+    fra Drive-URL'en her. Nat-synket henter din nyeste CSV automatisk.</p>
     <button class="act primary" id="psave" style="margin-top:16px">Gem</button>
-  </div>`;
+  </div>
+
+  <h2 style="margin:28px 0 6px;font-size:1.1rem">📦 Mine bindere</h2>
+  <p class="hint" style="max-width:520px;margin-bottom:10px">Vælg hvad du handler fra. Kort i en låst binder
+  vises stadig for de andre, men markeres <span class="badge lockb">I DECK</span> og filtreres fra som standard,
+  så ingen spørger efter et kort der sidder i et deck.</p>
+  <div class="field" id="blist"></div>`;
+
+  const bl=$("blist");
+  bl.innerHTML = binders.length ? binders.map((b,i)=>`<div class="binderrow">
+      <span class="nm">${esc(b)}</span>
+      <span class="seg" data-i="${i}">
+        <button data-v="trade" class="${lockedSet.has(b)?'':'on'}">Til handel</button>
+        <button data-v="lock" class="lock ${lockedSet.has(b)?'on':''}">Låst til deck</button>
+      </span></div>`).join("")
+    : `<p class="hint">Ingen bindere fundet i din seneste ManaBox-eksport. Sørg for at eksporten
+       indeholder kolonnen "Binder Name" — ellers kan alt kun behandles som ét samlet lager.</p>`;
+
+  bl.querySelectorAll(".seg").forEach(seg => seg.querySelectorAll("button").forEach(btn => btn.onclick = async () => {
+    const b = binders[Number(seg.dataset.i)];
+    btn.dataset.v === "lock" ? lockedSet.add(b) : lockedSet.delete(b);
+    seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===btn));
+    await setDoc(doc(db,"users",user.uid), { lockedBinders:[...lockedSet] }, { merge:true });
+    if (usersById[user.uid]) usersById[user.uid].lockedBinders = [...lockedSet];
+    toast(`${b}: ${btn.dataset.v === "lock" ? "låst til deck" : "til handel"}`);
+  }));
+
   $("psave").onclick=async()=>{
     await setDoc(doc(db,"users",user.uid),{name:$("pname").value.trim(),driveFolderId:$("pdrive").value.trim()},{merge:true});
     toast("Profil gemt");
