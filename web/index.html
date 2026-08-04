@@ -92,6 +92,36 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .remind { max-width:900px; background:#33301c; border:1px solid var(--accent); border-radius:10px;
   padding:11px 14px; margin-top:12px; font-size:.87rem; line-height:1.5; }
 .remind b { color:var(--accent); }
+/* --- kortvisning (zoom) --- */
+#lightbox { position:fixed; inset:0; background:rgba(8,9,14,.9); z-index:60;
+  display:none; align-items:center; justify-content:center; padding:20px; }
+#lightbox.on { display:flex; }
+.lbbox { background:var(--card); border:1px solid var(--line); border-radius:16px; position:relative;
+  max-width:840px; width:100%; max-height:92vh; overflow:auto; padding:22px;
+  display:grid; grid-template-columns:290px 1fr; gap:22px; }
+.lbbox img { width:100%; border-radius:12px; display:block; background:#0d0e14; aspect-ratio:488/680; }
+.lbclose { position:absolute; top:10px; right:12px; background:rgba(0,0,0,.5); color:#fff; border:none;
+  width:36px; height:36px; border-radius:50%; font-size:1.1rem; cursor:pointer; z-index:2; }
+.lbclose:hover { background:var(--lock); color:#241008; }
+.lbimg { position:relative; }
+.lbflip { position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,.72); color:#fff; border:1px solid #4a4f66; border-radius:20px;
+  padding:7px 14px; font-size:.82rem; cursor:pointer; }
+.lbh1 { font-size:1.25rem; font-weight:600; line-height:1.25; }
+.lbmana { font-size:.9rem; color:var(--muted); margin-top:2px; }
+.lbtype { font-size:.92rem; margin:12px 0 8px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+.lbtext { font-size:.9rem; line-height:1.6; white-space:pre-wrap; color:#d2d4de; }
+.lbrows { margin-top:14px; font-size:.85rem; }
+.lbrows div { display:flex; gap:10px; padding:5px 0; border-top:1px solid var(--line); }
+.lbrows span:first-child { color:var(--muted); min-width:96px; }
+.lbacts { margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.lbnav { display:flex; gap:6px; margin-left:auto; }
+@media (max-width:640px) {
+  #lightbox { padding:0; }
+  .lbbox { grid-template-columns:1fr; border-radius:0; max-height:100vh; height:100vh; padding:16px; gap:14px; }
+  .lbbox img { max-width:270px; margin:0 auto; }
+  .lbclose { width:44px; height:44px; }
+}
 /* --- kom i gang --- */
 .onb { background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:16px 18px;
   margin-bottom:16px; max-width:720px; }
@@ -169,6 +199,7 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
   <div id="newbar" style="display:none"></div>
 </header>
 <div id="view"></div>
+<div id="lightbox"><div class="lbbox" id="lbbox"></div></div>
 <div id="toast"></div>
 
 <script type="module">
@@ -194,6 +225,17 @@ const firebaseConfig = {
 // prik på fanen og en banner, indtil de har læst den. 'todo' er valgfri og
 // bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
 const PATCH_NOTES = [
+  {
+    v: "1.6", date: "3. august 2026",
+    title: "Klik på et kort for at se det stort",
+    items: [
+      "**Slut med at sidde med næsen i skærmen.** Klik hvor som helst på et kort, så åbner det i stor visning med hele regelteksten, mana value, sjældenhed, stand, binder og pris.",
+      "**Bladr med piletasterne.** Når du har åbnet et kort, går ← og → videre til næste kort i den liste du kigger på — også hvis du har filtreret. Escape lukker.",
+      "**Dobbeltsidede kort kan vendes** med en knap under billedet.",
+      "Hjertet virker stadig direkte på miniaturen, og der er også et i den store visning.",
+      "**Se alles kort på én gang.** Øverst i Venner kan du nu vælge 🌍 Alle samlinger. Så gælder alle filtre på tværs af hele gruppen, og hvert kort viser hvem der ejer det. Godt til at finde ud af om nogen overhovedet har et kort — uden at klikke sig gennem hver person.",
+    ],
+  },
   {
     v: "1.5", date: "3. august 2026",
     title: "Matches opdaterer med det samme",
@@ -498,12 +540,15 @@ function hitsIn(index, wants, includeDeck){
 }
 
 // Hent en persons fulde kortliste (kun når man åbner en konkret handel).
+const cardCache = {};
 async function loadCards(uid){
+  if (cardCache[uid]) return cardCache[uid];
   const meta = await getDoc(doc(db,"collections",uid));
   if (!meta.exists()) return [];
   const cs = await Promise.all(Array.from({length:meta.data().chunks||0},
     (_,i)=>getDoc(doc(db,"collections",uid,"chunks",String(i)))));
-  return cs.flatMap(s=>s.exists()?s.data().cards:[]);
+  cardCache[uid] = cs.flatMap(s=>s.exists()?s.data().cards:[]);
+  return cardCache[uid];
 }
 
 // ---------- Scryfall-søgning (avanceret syntaks) ----------
@@ -518,6 +563,122 @@ async function scryfallNames(q){
   }
   return { names, truncated: more };
 }
+
+// ---------- Kortvisning (zoom) ----------
+// Miniaturerne er for små til at læse regeltekst på. Klik på et kort åbner det
+// stort med alle detaljer. Manglende data (fx på wants, der kun har navn)
+// hentes fra Scryfall når visningen åbnes.
+const scryBig = (id, face="front") => id
+  ? `https://cards.scryfall.io/large/${face}/${id[0]}/${id[1]}/${id}.jpg` : "";
+
+let lbList = [], lbIdx = 0, lbFace = "front", lbOnWant = null;
+
+function openCard(card, list, idx, onWant){
+  lbList = list && list.length ? list : [card];
+  lbIdx = Number.isInteger(idx) ? idx : 0;
+  lbOnWant = onWant || null;
+  lbFace = "front";
+  $("lightbox").classList.add("on");
+  document.body.style.overflow = "hidden";
+  drawCard();
+}
+
+function closeCard(){
+  $("lightbox").classList.remove("on");
+  document.body.style.overflow = "";
+  lbList = [];
+}
+
+function stepCard(d){
+  if (lbList.length < 2) return;
+  lbIdx = (lbIdx + d + lbList.length) % lbList.length;
+  lbFace = "front";
+  drawCard();
+}
+
+async function drawCard(){
+  const c = lbList[lbIdx];
+  if (!c) return closeCard();
+  const wn = wantNames();
+  const isWant = wn.has(c.name.toLowerCase()) || wn.has(front(c.name));
+  const many = lbList.length > 1;
+  const row = (k,v) => v ? `<div><span>${k}</span><span>${v}</span></div>` : "";
+  const modeLabel = c._mode ? MODE_LABEL[c._mode] : "";
+
+  $("lbbox").innerHTML = `
+    <button class="lbclose" id="lbx" aria-label="Luk">✕</button>
+    <div class="lbimg">
+      <img id="lbpic" src="${scryBig(c.scryfallId, lbFace)}" alt="${esc(c.name)}"
+           onerror="this.style.opacity=.15">
+      <button class="lbflip" id="lbflip" style="display:none">↺ Vend kortet</button>
+    </div>
+    <div>
+      <div class="lbh1">${esc(c.name)}</div>
+      ${c.mana?`<div class="lbmana">${esc(c.mana)}</div>`:""}
+      ${c.type?`<div class="lbtype">${esc(c.type)}</div>`:""}
+      <div class="lbtext" id="lbtext">${c.text?esc(c.text):`<span style="color:var(--muted)">Henter regeltekst fra Scryfall...</span>`}</div>
+      <div class="lbrows">
+        ${row("Ejer", esc(c._ownerName||""))}
+        ${row("Sæt", [esc(c.setName||c.set||""), c.cn?"#"+esc(c.cn):""].filter(Boolean).join(" "))}
+        ${row("Sjældenhed", esc(c.rarity||""))}
+        ${row("Mana value", c.cmc!=null?c.cmc:"")}
+        ${row("Stand", esc(c.condition||""))}
+        ${row("Antal", c.qty>1?`${c.qty} stk.`:"")}
+        ${row("Binder", [esc(c.binder||""), modeLabel?`(${modeLabel.toLowerCase()})`:""].filter(Boolean).join(" "))}
+        ${row("Pris", c.eur!=null?money(c.eur):"")}
+      </div>
+      <div class="lbacts">
+        <button class="act ${isWant?"":"primary"}" id="lbwant">${isWant?"♥ Fjern fra wants":"♡ Tilføj til mine wants"}</button>
+        ${c.scryfallId?`<a class="act" href="https://scryfall.com/card/${esc(c.scryfallId)}" target="_blank" rel="noopener" style="text-decoration:none">Scryfall ↗</a>`:""}
+        ${many?`<span class="lbnav">
+          <button class="act" id="lbprev" aria-label="Forrige">←</button>
+          <span style="align-self:center;font-size:.82rem;color:var(--muted)">${lbIdx+1}/${lbList.length}</span>
+          <button class="act" id="lbnext" aria-label="Næste">→</button></span>`:""}
+      </div>
+    </div>`;
+
+  $("lbx").onclick = closeCard;
+  if (many){ $("lbprev").onclick = () => stepCard(-1); $("lbnext").onclick = () => stepCard(1); }
+  $("lbwant").onclick = async () => {
+    await toggleWant({ name:c.name, id:c.scryfallId, set:c.set, cn:c.cn });
+    if (lbOnWant) lbOnWant();
+    drawCard();
+  };
+
+  // Dobbeltsidede kort: prøv bagsiden, og vis kun knappen hvis den findes.
+  if (c.scryfallId){
+    const probe = new Image();
+    probe.onload = () => {
+      const b = $("lbflip");
+      if (!b) return;
+      b.style.display = "block";
+      b.textContent = lbFace === "front" ? "↺ Vis bagsiden" : "↺ Vis forsiden";
+      b.onclick = () => { lbFace = lbFace === "front" ? "back" : "front"; drawCard(); };
+    };
+    probe.src = scryBig(c.scryfallId, lbFace === "front" ? "back" : "front");
+  }
+
+  // Wants har kun navn og ID — hent resten fra Scryfall når visningen er åben.
+  if (!c.text && c.scryfallId){
+    try {
+      const d = await (await fetch(`https://api.scryfall.com/cards/${encodeURIComponent(c.scryfallId)}`)).json();
+      const faces = d.card_faces || [];
+      const join = k => d[k] || faces.map(f=>f[k]).filter(Boolean).join("\n//\n");
+      Object.assign(c, { text:join("oracle_text"), type:join("type_line"), mana:join("mana_cost"),
+                         cmc:d.cmc, rarity:c.rarity||d.rarity, setName:c.setName||d.set_name,
+                         eur:c.eur ?? (d.prices?.eur ? Number(d.prices.eur) : null) });
+      if (lbList[lbIdx] === c) drawCard();
+    } catch { if ($("lbtext")) $("lbtext").innerHTML = `<span style="color:var(--muted)">Kunne ikke hente regelteksten.</span>`; }
+  }
+}
+
+$("lightbox").onclick = e => { if (e.target.id === "lightbox") closeCard(); };
+document.addEventListener("keydown", e => {
+  if (!$("lightbox").classList.contains("on")) return;
+  if (e.key === "Escape") closeCard();
+  if (e.key === "ArrowLeft") stepCard(-1);
+  if (e.key === "ArrowRight") stepCard(1);
+});
 
 // ---------- Kom i gang ----------
 // Nye brugere lander på en tom Venner-fane uden at vide hvad de skal. Tjeklisten
@@ -626,6 +787,7 @@ async function renderFriends() {
           <option value="cmc-desc">Mana value, høj→lav</option>
           <option value="qty-desc">Antal, flest først</option>
           <option value="set">Sæt</option>
+          <option value="owner">Ejer</option>
         </select>
         <button class="act" id="clr">Nulstil filtre</button>
         <span class="count" id="count"></span>
@@ -644,26 +806,50 @@ async function renderFriends() {
     if (c.exists()) cols[u.id] = { ...u, ...c.data() };
   }
   const ids = Object.keys(cols);
-  $("who").innerHTML = ids.map(id=>`<option value="${esc(id)}">${esc(cols[id].name)} (${cols[id].uniqueCount||0} kort)</option>`).join("")
-    || `<option>Ingen samlinger endnu</option>`;
+  const totalUnique = ids.reduce((s,id)=>s+(cols[id].uniqueCount||0),0);
+  $("who").innerHTML = ids.length
+    ? (ids.length > 1 ? `<option value="*">🌍 Alle samlinger (${totalUnique} kort)</option>` : "")
+      + ids.map(id=>`<option value="${esc(id)}">${esc(cols[id].name)} (${cols[id].uniqueCount||0} kort)</option>`).join("")
+    : `<option>Ingen samlinger endnu</option>`;
 
   let cards = [], filtered = [], shown = 0, ownerId = null, modes = {}, baseStatus = "";
+  const modesByUid = {};
+  ids.forEach(id => modesByUid[id] = modesOf(id));
+  // I "Alle"-visning bærer hvert kort sin ejer, så binder-status slås op hos den
+  // rigtige person — ikke hos den der tilfældigvis er valgt i dropdownen.
+  const modesFor = c => c._owner ? (modesByUid[c._owner] || {}) : modes;
 
   async function load(id){
-    if(!cols[id]) return;
-    ownerId = id; modes = modesOf(id);
-    $("status").textContent = "Henter...";
-    const cs = await Promise.all(Array.from({length:cols[id].chunks||0},(_,i)=>getDoc(doc(db,"collections",id,"chunks",String(i)))));
-    cards = cs.flatMap(s=>s.exists()?s.data().cards:[]);
-    fillOptions(cols[id]);
+    ownerId = id;
+    const all = id === "*";
+    if (!all && !cols[id]) return;
+    $("status").textContent = all ? `Henter alle ${ids.length} samlinger...` : "Henter...";
+
+    if (all) {
+      const lists = await Promise.all(ids.map(u => loadCards(u)));
+      cards = lists.flatMap((list, i) => list.map(c =>
+        ({ ...c, _owner: ids[i], _ownerName: cols[ids[i]].name })));
+      modes = {};
+    } else {
+      modes = modesByUid[id] || modesOf(id);
+      cards = await loadCards(id);
+    }
+
+    fillOptions(all ? null : cols[id]);
     syncPanel();
     const n = { trade:0, deck:0, list:0 };
-    cards.forEach(c => n[modeOf(c, modes)]++);
-    baseStatus = `${cols[id].name}: ${n.trade + n.deck} fysiske kort · opdateret ${new Date(cols[id].updated).toLocaleString("da")}`
+    cards.forEach(c => n[modeOf(c, modesFor(c))]++);
+    const upd = all ? null : cols[id].updated;
+    baseStatus = (all ? `Alle ${ids.length} samlinger` : cols[id].name)
+      + `: ${n.trade + n.deck} fysiske kort`
+      + (all ? "" : ` · opdateret ${new Date(upd).toLocaleString("da")}`)
       + (n.deck ? ` · ${n.deck} låst til decks` : "")
       + (n.list ? ` · ${n.list} i lister (skjult)` : "")
-      + (isStale(cols[id].updated) ? staleNote(cols[id].updated) : "");
-    $("status").style.color = isStale(cols[id].updated) ? "var(--lock)" : "var(--muted)";
+      + (!all && isStale(upd) ? staleNote(upd) : "")
+      + (all && ids.some(u => isStale(cols[u].updated))
+          ? ` ⚠ ${ids.filter(u=>isStale(cols[u].updated)).map(u=>cols[u].name).join(", ")} er forældet` : "");
+    $("status").style.color = (all ? ids.some(u=>isStale(cols[u].updated)) : isStale(upd))
+      ? "var(--lock)" : "var(--muted)";
     draw();
   }
 
@@ -674,12 +860,13 @@ async function renderFriends() {
     $("cond").innerHTML = `<option value="">Alle</option>` +
       uniq("condition").map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
     // meta.binders er objekter {name,type,mode,...}; ældre sync gav rene strenge.
-    const raw = (meta.binders && meta.binders.length) ? meta.binders : uniq("binder");
+    // I "Alle"-visning findes der ingen fælles meta — så udled navnene af kortene.
+    const raw = (meta && meta.binders && meta.binders.length) ? meta.binders : uniq("binder");
     const binders = raw.map(b => typeof b === "string" ? { name:b } : b);
     $("binder").innerHTML = `<option value="">Alle bindere</option>` +
       binders.map(b=>{
-        const m = modes[b.name] || autoMode(b.type);
-        return `<option value="${esc(b.name)}">${esc(b.name)}${m!=="trade"?` (${MODE_LABEL[m].toLowerCase()})`:""}</option>`;
+        const m = meta ? (modes[b.name] || autoMode(b.type)) : "trade";
+        return `<option value="${esc(b.name)}">${esc(b.name)}${meta && m!=="trade"?` (${MODE_LABEL[m].toLowerCase()})`:""}</option>`;
       }).join("") +
       (binders.length ? "" : `<option disabled>ingen binder-data i eksporten</option>`);
     $("set").value = F.set; $("cond").value = F.cond; $("binder").value = F.binder;
@@ -712,7 +899,7 @@ async function renderFriends() {
     if (F.cmcMax !== "" && !(Number(c.cmc ?? 1e9) <= Number(F.cmcMax))) return false;
     if (F.pmin !== "" && !(c.eur != null && c.eur >= toEur(Number(F.pmin)))) return false;
     if (F.pmax !== "" && !(c.eur != null && c.eur <= toEur(Number(F.pmax)))) return false;
-    const mode = modeOf(c, modes);
+    const mode = modeOf(c, modesFor(c));
     if (F.lock === "trade"  && mode !== "trade") return false;
     if (F.lock === "locked" && mode !== "deck")  return false;
     if (F.lock === "list"   && mode !== "list")  return false;
@@ -750,6 +937,8 @@ async function renderFriends() {
       case "cmc-desc":   return (b.cmc ?? -1) - (a.cmc ?? -1) || a.name.localeCompare(b.name,"da");
       case "qty-desc":   return (b.qty||0) - (a.qty||0);
       case "set":        return String(a.set).localeCompare(String(b.set)) || a.name.localeCompare(b.name,"da");
+      case "owner":      return String(a._ownerName||"").localeCompare(String(b._ownerName||""),"da")
+                             || a.name.localeCompare(b.name,"da");
       default:           return a.name.localeCompare(b.name,"da");
     }
   }
@@ -767,17 +956,22 @@ async function renderFriends() {
     const wn = wantNames();
     const slice = filtered.slice(shown, shown+100);
     $("grid").insertAdjacentHTML("beforeend", slice.map((c,i)=>
-      cardHtml(c, wn.has(c.name.toLowerCase()) || wn.has(front(c.name)), modeOf(c,modes), shown+i)).join(""));
+      cardHtml(c, wn.has(c.name.toLowerCase()) || wn.has(front(c.name)), modeOf(c,modesFor(c)), shown+i)).join(""));
     shown += slice.length;
     $("more").style.display = shown < filtered.length ? "block" : "none";
     bindHearts();
   }
 
   function bindHearts(){
-    $("grid").querySelectorAll(".heart").forEach(h => h.onclick = async () => {
+    $("grid").querySelectorAll(".heart").forEach(h => h.onclick = async e => {
+      e.stopPropagation();                       // ellers åbner zoom-visningen også
       const c = filtered[Number(h.dataset.i)];
       await toggleWant({ name:c.name, id:c.scryfallId, set:c.set, cn:c.cn });
       draw();
+    });
+    $("grid").querySelectorAll(".card").forEach(el => el.onclick = () => {
+      const i = Number(el.dataset.i);
+      openCard({ ...filtered[i], _mode: modeOf(filtered[i], modesFor(filtered[i])) }, filtered, i, draw);
     });
   }
 
@@ -834,12 +1028,12 @@ function cardHtml(c, isWant, mode, idx){
   const modeBadge = mode === "deck" ? `<span class="badge lockb">I DECK</span>`
                   : mode === "list" ? `<span class="badge listb">LISTE</span>` : "";
   const p = c.eur != null ? `<div class="price">${money(c.eur)}${c.qty>1?` <span style="color:var(--muted);font-weight:400">· i alt ${money(c.eur*c.qty)}</span>`:""}</div>` : "";
-  return `<div class="card${isWant?' want':''}${dim?' locked':''}">
+  return `<div class="card${isWant?' want':''}${dim?' locked':''}"${idx!=null?` data-i="${idx}" style="cursor:zoom-in"`:""}>
     <div class="badges">${c.qty>1?`<span class="badge qty">x${c.qty}</span>`:""}${c.foil?`<span class="badge foil">FOIL</span>`:""}${isWant?`<span class="badge wantb">WANT</span>`:""}${modeBadge}</div>
     ${idx!=null?`<button class="heart${isWant?' on':''}" data-i="${idx}" title="${isWant?'Fjern fra wants':'Tilføj til mine wants'}">${isWant?'♥':'♡'}</button>`:""}
     <img loading="lazy" src="${scryImg(c.scryfallId)}" onerror="this.style.opacity=.15">
     <div class="info"><div class="name">${esc(c.name)}</div>
-      <div class="meta">${esc(c.set||"")} ${c.cn?"#"+esc(c.cn):""}${c.condition?" · "+esc(c.condition):""}${c.binder?" · "+esc(c.binder):""}</div>
+      <div class="meta">${c._ownerName?`<b style="color:var(--accent)">${esc(c._ownerName)}</b> · `:""}${esc(c.set||"")} ${c.cn?"#"+esc(c.cn):""}${c.condition?" · "+esc(c.condition):""}${c.binder?" · "+esc(c.binder):""}</div>
       ${p}</div></div>`;
 }
 
@@ -913,16 +1107,28 @@ async function doSearch(q){
     r.innerHTML=cards.map((c,i)=>{
       const on=wn.has(c.name.toLowerCase());
       const eur = c.prices?.eur ? Number(c.prices.eur) : null;
-      return `<div class="card${on?' want':''}">
+      return `<div class="card${on?' want':''}" data-i="${i}" style="cursor:zoom-in">
         <button class="heart${on?' on':''}" data-i="${i}">${on?'♥':'♡'}</button>
         <img loading="lazy" src="${scryImg(c.id)}" onerror="this.style.opacity=.15">
         <div class="info"><div class="name">${esc(c.name)}</div>
           <div class="meta">${esc((c.set||'').toUpperCase())} #${esc(c.collector_number||'')}</div>
           ${eur!=null?`<div class="price">${money(eur)}</div>`:""}</div></div>`;
     }).join("");
-    r.querySelectorAll(".heart").forEach(h=>h.onclick=()=>{
+    // Scryfall-svaret har allerede alt vi skal bruge til zoom-visningen.
+    const asCard = c => ({ name:c.name, scryfallId:c.id, set:(c.set||'').toUpperCase(),
+      setName:c.set_name, cn:c.collector_number||'', rarity:c.rarity, cmc:c.cmc,
+      type:c.type_line || (c.card_faces||[]).map(f=>f.type_line).filter(Boolean).join("\n//\n"),
+      text:c.oracle_text || (c.card_faces||[]).map(f=>f.oracle_text).filter(Boolean).join("\n//\n"),
+      mana:c.mana_cost || (c.card_faces||[]).map(f=>f.mana_cost).filter(Boolean).join("\n//\n"),
+      eur:c.prices?.eur ? Number(c.prices.eur) : null });
+    r.querySelectorAll(".heart").forEach(h=>h.onclick=e=>{
+      e.stopPropagation();
       const c=cards[Number(h.dataset.i)];
       toggleWant({name:c.name, id:c.id, set:(c.set||'').toUpperCase(), cn:c.collector_number||''});
+    });
+    r.querySelectorAll(".card").forEach(el=>el.onclick=()=>{
+      const i=Number(el.dataset.i);
+      openCard(asCard(cards[i]), cards.map(asCard), i, ()=>doSearch($("search").value));
     });
   }catch(e){ r.innerHTML=`<p class="hint">Kunne ikke søge: ${esc(e.message)}</p>`; }
 }
@@ -939,12 +1145,20 @@ async function toggleWant(d){
 
 function drawMine(){
   const m=$("mine"); if(!m)return;
-  m.innerHTML = myWants.length? myWants.map((w,i)=>`<div class="card want">
+  const snapshot = myWants.slice();   // klik-listen må ikke ændre sig under fingrene
+  m.innerHTML = myWants.length? myWants.map((w,i)=>`<div class="card want" data-i="${i}" style="cursor:zoom-in">
     <button class="heart on" data-i="${i}">♥</button>
     <img loading="lazy" src="${scryImg(w.scryfallId)}" onerror="this.style.opacity=.15">
     <div class="info"><div class="name">${esc(w.name)}</div><div class="meta">${esc(w.set||'')} ${w.cn?'#'+esc(w.cn):''}</div></div></div>`).join("")
     : `<p class="hint">Ingen wants endnu. Søg et kort ovenfor og tryk på hjertet — eller sæt hjerte direkte på et kort i en vens samling.</p>`;
-  m.querySelectorAll(".heart").forEach(h=>h.onclick=()=>toggleWant({name:myWants[Number(h.dataset.i)].name}));
+  m.querySelectorAll(".heart").forEach(h=>h.onclick=e=>{
+    e.stopPropagation();
+    toggleWant({name:myWants[Number(h.dataset.i)].name});
+  });
+  m.querySelectorAll(".card").forEach(el=>el.onclick=()=>{
+    const i=Number(el.dataset.i);
+    openCard({...snapshot[i]}, snapshot.map(w=>({...w})), i, drawMine);
+  });
 }
 
 async function importDeck(){
