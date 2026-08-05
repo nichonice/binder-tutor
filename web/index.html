@@ -233,6 +233,14 @@ const firebaseConfig = {
 // bruges til ting brugerne selv skal gøre. Understøtter **fed** i teksten.
 const PATCH_NOTES = [
   {
+    v: "1.7", date: "3. august 2026",
+    title: "Farvefiltret virker som man forventer",
+    items: [
+      "**Vælger du hvid, får du hvide kort.** Før kom hvid/sorte kort også med, fordi filtret ledte efter kort der *indeholdt* hvid. Nu betyder hvid præcis hvid — og vil du have hvid/sorte kort, vælger du både hvid og sort.",
+      "De gamle måder at søge på findes stadig i rullelisten under farvechipsene. **Indeholdt i de valgte** er den du vil have når du bygger deck: vælg dine farver, og se alt der lovligt må sidde i det, inklusive farveløse kort.",
+    ],
+  },
+  {
     v: "1.6", date: "3. august 2026",
     title: "Klik på et kort for at se det stort",
     items: [
@@ -736,7 +744,7 @@ function bindOnboarding(){
 }
 
 // ---------- Venner (samlinger) ----------
-const F = { q:"", text:"", type:"", colors:new Set(), cmode:"any", cmcMin:"", cmcMax:"",
+const F = { q:"", text:"", type:"", colors:new Set(), cmode:"exact", cmcMin:"", cmcMax:"",
             set:"", rar:new Set(), foil:"", cond:"", binder:"", lock:"", want:"",
             pmin:"", pmax:"", sort:"name", sq:"", sqNames:null };
 
@@ -753,11 +761,13 @@ async function renderFriends() {
         <div><label>Farveidentitet</label>
           <div class="chips" id="colors">${["W","U","B","R","G","C"].map(c=>`<span class="chip ${c}" data-c="${c}">${c}</span>`).join("")}</div>
           <select id="cmode" style="margin-top:6px">
+            <option value="exact">præcis de valgte farver</option>
+            <option value="within">indeholdt i de valgte (til deck-byg)</option>
+            <option value="all">mindst de valgte (må have flere)</option>
             <option value="any">mindst én af de valgte</option>
-            <option value="all">alle valgte (må have flere)</option>
-            <option value="exact">præcis de valgte</option>
-            <option value="within">indeholdt i de valgte</option>
           </select>
+          <p class="hint" style="margin-top:5px">Vælger du W, får du kun hvide kort — ikke WB.
+          Vælg både W og B for WB-kort.</p>
         </div>
         <div><label>Mana value (CMC)</label>
           <div class="pair2"><input id="cmcMin" type="number" min="0" placeholder="fra"><input id="cmcMax" type="number" min="0" placeholder="til"></div>
@@ -931,13 +941,18 @@ async function renderFriends() {
       const colorless = raw.size === 0;
       const wantsC = F.colors.has("C");
       const sel = new Set([...F.colors].filter(x => x !== "C"));
+      // "C" er farveløs og lægges til som et alternativ — vælger man W og C,
+      // menes mono-hvide ELLER farveløse kort.
       let ok;
       switch (F.cmode) {
-        case "all":    ok = sel.size ? [...sel].every(x=>raw.has(x)) : (wantsC && colorless); break;
-        case "exact":  ok = sel.size ? (raw.size === sel.size && [...sel].every(x=>raw.has(x)))
-                                     : (wantsC && colorless); break;
         case "within": ok = colorless || [...raw].every(x=>sel.has(x)); break;
-        default:       ok = (wantsC && colorless) || [...sel].some(x=>raw.has(x));
+        case "all":    ok = (wantsC && colorless)
+                         || (sel.size > 0 && [...sel].every(x=>raw.has(x))); break;
+        case "any":    ok = (wantsC && colorless) || [...sel].some(x=>raw.has(x)); break;
+        // Standard: præcis de valgte farver. W = mono-hvid, ikke WB.
+        default:       ok = (wantsC && colorless)
+                         || (sel.size > 0 && raw.size === sel.size
+                             && [...sel].every(x=>raw.has(x)));
       }
       if (!ok) return false;
     }
@@ -1031,7 +1046,7 @@ async function renderFriends() {
     F.colors.clear(); F.rar.clear();
     ["q","text","type","cmcMin","cmcMax","pmin","pmax","sq"].forEach(k=>{ if($(k)) $(k).value=""; });
     ["set","cond","binder","foil","lock","want"].forEach(k=>{ if($(k)) $(k).value=""; });
-    $("sort").value = "name"; $("cmode").value = "any";
+    $("sort").value = "name"; $("cmode").value = "exact";
     $("panel").querySelectorAll(".chip").forEach(c=>c.classList.remove("on"));
     draw();
   };
