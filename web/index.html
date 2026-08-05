@@ -84,6 +84,11 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 .titem .tm { font-size:.75rem; color:var(--muted); }
 .titem .tp { font-weight:700; color:var(--accent); white-space:nowrap; }
 .titem.off { opacity:.4; }
+.thumb { width:46px; aspect-ratio:488/680; border-radius:4px; flex-shrink:0; cursor:zoom-in;
+  background:#0d0e14; object-fit:cover; }
+.thumb:hover { outline:2px solid var(--accent); }
+.pair { display:flex; gap:10px; align-items:center; }
+.pair .txt { flex:1; line-height:1.4; }
 .titem .drop { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.95rem; padding:0 2px; }
 .titem .drop:hover { color:var(--lock); }
 .bal { max-width:900px; background:var(--card2); border:1px solid var(--line); border-radius:12px;
@@ -97,9 +102,10 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
   display:none; align-items:center; justify-content:center; padding:20px; }
 #lightbox.on { display:flex; }
 .lbbox { background:var(--card); border:1px solid var(--line); border-radius:16px; position:relative;
-  max-width:840px; width:100%; max-height:92vh; overflow:auto; padding:22px;
-  display:grid; grid-template-columns:290px 1fr; gap:22px; }
-.lbbox img { width:100%; border-radius:12px; display:block; background:#0d0e14; aspect-ratio:488/680; }
+  max-width:1020px; width:100%; max-height:94vh; overflow:auto; padding:24px;
+  display:grid; grid-template-columns:minmax(300px,420px) 1fr; gap:26px; }
+.lbbox img { width:100%; border-radius:14px; display:block; background:#0d0e14; aspect-ratio:488/680;
+  cursor:zoom-in; }
 .lbclose { position:absolute; top:10px; right:12px; background:rgba(0,0,0,.5); color:#fff; border:none;
   width:36px; height:36px; border-radius:50%; font-size:1.1rem; cursor:pointer; z-index:2; }
 .lbclose:hover { background:var(--lock); color:#241008; }
@@ -119,7 +125,8 @@ label { display:block; font-size:.8rem; color:var(--muted); margin:12px 0 4px; }
 @media (max-width:640px) {
   #lightbox { padding:0; }
   .lbbox { grid-template-columns:1fr; border-radius:0; max-height:100vh; height:100vh; padding:16px; gap:14px; }
-  .lbbox img { max-width:270px; margin:0 auto; }
+  .lbbox img { max-width:min(340px,78vw); margin:0 auto; }
+  .thumb { width:56px; }
   .lbclose { width:44px; height:44px; }
 }
 /* --- kom i gang --- */
@@ -229,7 +236,8 @@ const PATCH_NOTES = [
     v: "1.6", date: "3. august 2026",
     title: "Klik på et kort for at se det stort",
     items: [
-      "**Slut med at sidde med næsen i skærmen.** Klik hvor som helst på et kort, så åbner det i stor visning med hele regelteksten, mana value, sjældenhed, stand, binder og pris.",
+      "**Slut med at sidde med næsen i skærmen.** Klik hvor som helst på et kort, så åbner det i stor visning med hele regelteksten, mana value, sjældenhed, stand, binder og pris. Klik på selve billedet for at åbne det i fuld opløsning.",
+      "**Billeder i Trading Hub og i Hvem har mine wants.** Begge steder var ren tekst før. Nu er der et miniaturebillede ved hvert kort, som du kan klikke for at se det stort — også midt i at bygge en handel.",
       "**Bladr med piletasterne.** Når du har åbnet et kort, går ← og → videre til næste kort i den liste du kigger på — også hvis du har filtreret. Escape lukker.",
       "**Dobbeltsidede kort kan vendes** med en knap under billedet.",
       "Hjertet virker stadig direkte på miniaturen, og der er også et i den store visning.",
@@ -609,7 +617,7 @@ async function drawCard(){
     <button class="lbclose" id="lbx" aria-label="Luk">✕</button>
     <div class="lbimg">
       <img id="lbpic" src="${scryBig(c.scryfallId, lbFace)}" alt="${esc(c.name)}"
-           onerror="this.style.opacity=.15">
+           title="Klik for fuld opløsning" onerror="this.style.opacity=.15">
       <button class="lbflip" id="lbflip" style="display:none">↺ Vend kortet</button>
     </div>
     <div>
@@ -638,6 +646,14 @@ async function drawCard(){
     </div>`;
 
   $("lbx").onclick = closeCard;
+  // Klik på billedet åbner Scryfalls fulde opløsning (745×1040 PNG) i ny fane.
+  // Vi viser 'large'-udgaven som standard, så mobildata ikke brændes af unødigt.
+  $("lbpic").onclick = () => {
+    if (!c.scryfallId) return;
+    const id = c.scryfallId;
+    window.open(`https://cards.scryfall.io/png/${lbFace}/${id[0]}/${id[1]}/${id}.png`,
+                "_blank", "noopener");
+  };
   if (many){ $("lbprev").onclick = () => stepCard(-1); $("lbnext").onclick = () => stepCard(1); }
   $("lbwant").onclick = async () => {
     await toggleWant({ name:c.name, id:c.scryfallId, set:c.set, cn:c.cn });
@@ -1193,10 +1209,19 @@ async function renderMatches(){
     $("mstat").textContent = rows.length ? ""
       : myWants.length ? "Ingen af dine wants findes hos de andre lige nu — prøv at vise deck-kort også."
       : "Du har ingen wants endnu. Sæt et hjerte på et kort, så dukker der matches op med det samme.";
-    $("mb").innerHTML = rows.map(([u,hits,total])=>`<div class="matchbox">
+    $("mb").innerHTML = rows.map(([u,hits,total],ri)=>`<div class="matchbox" data-r="${ri}">
       <h2>💰 ${esc(u.name || u.id)} har ${hits.length} af dine wants — værdi ~${money(total)}</h2>
-      ${hits.map(h=>`<div class="pair${h.mode==="deck"?' locked':''}">• ${esc(h.name)}${h.qty>1?` x${h.qty}`:''}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''}${h.mode==="deck"?' <span class="badge lockb">I DECK</span>':''}</div>`).join("")}
+      ${hits.map((h,i)=>`<div class="pair${h.mode==="deck"?' locked':''}" data-i="${i}">
+        <img class="thumb" loading="lazy" src="${scryImg(h.scryfallId)}" alt="" onerror="this.style.opacity=.15">
+        <span class="txt">${esc(h.name)}${h.qty>1?` x${h.qty}`:''}${h.eur?` · <b style="color:var(--accent)">${money(h.eur)}</b>`:''}${h.mode==="deck"?' <span class="badge lockb">I DECK</span>':''}</span>
+      </div>`).join("")}
     </div>`).join("");
+
+    $("mb").querySelectorAll(".matchbox").forEach(box => box.querySelectorAll(".thumb").forEach(img => img.onclick = () => {
+      const hits = rows[Number(box.dataset.r)][1];
+      const i = Number(img.closest(".pair").dataset.i);
+      openCard({ ...hits[i] }, hits.map(h=>({...h})), i, draw);
+    }));
   }
   $("showlock").onchange = draw;
   draw();
@@ -1307,16 +1332,17 @@ async function buildTrade(p, myBlock){
     </div>
     <div class="remind"><b>Efter handlen:</b> ${esc(REMINDER)}</div>`;
 
-  const row = (c, side) => `<div class="titem${sel[side].has(cardKey(c))?"":" off"}" data-k="${esc(cardKey(c))}" data-s="${side}">
+  const row = (c, side, i) => `<div class="titem${sel[side].has(cardKey(c))?"":" off"}" data-k="${esc(cardKey(c))}" data-s="${side}" data-i="${i}">
       <input type="checkbox" ${sel[side].has(cardKey(c))?"checked":""}>
+      <img class="thumb" loading="lazy" src="${scryImg(c.scryfallId)}" alt="" onerror="this.style.opacity=.15">
       <span class="tn">${esc(c.name)}<div class="tm">${esc(c.set||"")} ${c.cn?"#"+esc(c.cn):""}${c.foil?" · foil":""}${c.qty>1?` · har ${c.qty}`:""}</div></span>
       <span class="tp">${c.eur!=null?money(c.eur):"—"}</span>
       ${side==="give"?`<button class="drop" title="Marker som ikke til handel">✕</button>`:""}
     </div>`;
 
   function draw(){
-    $("lget").innerHTML  = p.iGet.length   ? p.iGet.map(c=>row(c,"get")).join("")     : `<p class="hint">Ingen af dine wants hos ${esc(name)}.</p>`;
-    $("lgive").innerHTML = p.theyGet.length? p.theyGet.map(c=>row(c,"give")).join("") : `<p class="hint">${esc(name)} mangler ingen af dine kort.</p>`;
+    $("lget").innerHTML  = p.iGet.length   ? p.iGet.map((c,i)=>row(c,"get",i)).join("")     : `<p class="hint">Ingen af dine wants hos ${esc(name)}.</p>`;
+    $("lgive").innerHTML = p.theyGet.length? p.theyGet.map((c,i)=>row(c,"give",i)).join("") : `<p class="hint">${esc(name)} mangler ingen af dine kort.</p>`;
     const vg = p.iGet.filter(c=>sel.get.has(cardKey(c))).reduce((s,c)=>s+(c.eur||0),0);
     const vv = p.theyGet.filter(c=>sel.give.has(cardKey(c))).reduce((s,c)=>s+(c.eur||0),0);
     $("sget").textContent  = `${sel.get.size} valgt · ${money(vg)}`;
@@ -1330,6 +1356,13 @@ async function buildTrade(p, myBlock){
   }
 
   function bind(){
+    // Klik på miniaturen åbner den store visning og bladrer i den kolonne man er i.
+    view.querySelectorAll(".titem .thumb").forEach(img => img.onclick = () => {
+      const it = img.closest(".titem");
+      const list = it.dataset.s === "get" ? p.iGet : p.theyGet;
+      const i = Number(it.dataset.i);
+      openCard({ ...list[i] }, list.map(x=>({...x})), i, draw);
+    });
     view.querySelectorAll(".titem input").forEach(inp => inp.onchange = () => {
       const it = inp.closest(".titem"), k = it.dataset.k, s = it.dataset.s;
       inp.checked ? sel[s].add(k) : sel[s].delete(k);
